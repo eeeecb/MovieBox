@@ -1,0 +1,40 @@
+{
+  "name": "MovieBox",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo-google-fonts/encode-sans-expanded": "^0.2.3",
+    "@expo-google-fonts/exo": "^0.3.0",
+    "@expo-google-fonts/orbitron": "^0.3.0",
+    "@expo-google-fonts/ramabhadra": "^0.2.3",
+    "@expo/metro-runtime": "~4.0.1",
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-native-community/slider": "^4.5.6",
+    "@react-native-picker/picker": "^2.11.0",
+    "@react-navigation/bottom-tabs": "^7.3.8",
+    "@react-navigation/native": "^7.1.4",
+    "@react-navigation/stack": "^7.2.8",
+    "expo": "~52.0.41",
+    "expo-font": "~13.0.4",
+    "expo-image-picker": "^16.0.6",
+    "expo-status-bar": "~2.0.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-native": "0.76.7",
+    "react-native-gesture-handler": "^2.25.0",
+    "react-native-safe-area-context": "^5.3.0",
+    "react-native-screens": "^4.10.0",
+    "react-native-web": "~0.19.13"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "expo-module-scripts": "^4.0.4"
+  },
+  "private": true
+}
