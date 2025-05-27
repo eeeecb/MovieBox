@@ -1,4 +1,5 @@
-import React from 'react';
+// src/screens/FavoritesScreen.js
+import React, { useState } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -7,40 +8,57 @@ import {
   Image, 
   TouchableOpacity, 
   SafeAreaView, 
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
+
 import { useTheme } from '../contexts/ThemeContext';
-import { useFavorites } from '../contexts/FavoritesContext';
+import { useAuth } from '../hooks/useAuth';
+import { useFavorites } from '../hooks/useFavorites';
+import { tmdbApi } from '../services/tmdbApi';
 
 export default function FavoritesScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const { favorites, removeFavorite } = useFavorites();
-  const [isRemoving, setIsRemoving] = React.useState(false);
-  const [removingId, setRemovingId] = React.useState(null);
+  const { user, isAuthenticated } = useAuth();
+  const { favorites, loading, removeFavorite } = useFavorites(user?.uid);
   
-  // Função para formatar data
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR');
-  };
+  const [removingId, setRemovingId] = useState(null);
   
   // Função para remover um favorito
-  const handleRemoveFavorite = async (movieId) => {
-    setRemovingId(movieId);
-    setIsRemoving(true);
-    
-    try {
-      await removeFavorite(movieId);
-    } catch (error) {
-      console.error('Erro ao remover favorito:', error);
-    } finally {
-      setIsRemoving(false);
-      setRemovingId(null);
-    }
+  const handleRemoveFavorite = async (movieId, movieTitle) => {
+    Alert.alert(
+      'Remover Favorito',
+      `Tem certeza que deseja remover "${movieTitle}" dos seus favoritos?`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Remover',
+          style: 'destructive',
+          onPress: async () => {
+            setRemovingId(movieId);
+            
+            try {
+              const result = await removeFavorite(movieId);
+              
+              if (!result.success) {
+                Alert.alert('Erro', result.error || 'Erro ao remover favorito');
+              }
+            } catch (error) {
+              console.error('Erro ao remover favorito:', error);
+              Alert.alert('Erro', 'Erro inesperado ao remover favorito');
+            } finally {
+              setRemovingId(null);
+            }
+          }
+        }
+      ]
+    );
   };
   
   // Função para renderizar um filme favorito
@@ -52,7 +70,7 @@ export default function FavoritesScreen({ navigation }) {
       <View style={styles.favoriteRow}>
         {item.poster_path ? (
           <Image 
-            source={{ uri: `https://image.tmdb.org/t/p/w154${item.poster_path}` }} 
+            source={{ uri: tmdbApi.getImageUrl(item.poster_path, 'w154') }} 
             style={styles.posterImage} 
           />
         ) : (
@@ -78,20 +96,30 @@ export default function FavoritesScreen({ navigation }) {
               {item.release_date ? new Date(item.release_date).getFullYear() : 'N/A'}
             </Text>
           </View>
+          
+          {/* Sinopse curta */}
+          {item.overview && (
+            <Text 
+              style={[styles.overviewText, { color: theme.colors.secondaryText }]}
+              numberOfLines={2}
+            >
+              {item.overview}
+            </Text>
+          )}
         </View>
         
         <TouchableOpacity 
           style={[
             styles.removeButton, 
-            isRemoving && removingId === item.id ? styles.removingButton : null
+            removingId === item.id ? styles.removingButton : null
           ]}
-          onPress={() => handleRemoveFavorite(item.id)}
-          disabled={isRemoving}
+          onPress={() => handleRemoveFavorite(item.id, item.title)}
+          disabled={removingId === item.id}
         >
-          {isRemoving && removingId === item.id ? (
-            <ActivityIndicator size="small" color={theme.colors.text} />
+          {removingId === item.id ? (
+            <ActivityIndicator size="small" color={theme.colors.error} />
           ) : (
-            <Ionicons name="trash-outline" size={20} color={theme.colors.text} />
+            <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
           )}
         </TouchableOpacity>
       </View>
@@ -104,6 +132,25 @@ export default function FavoritesScreen({ navigation }) {
       <Text style={[styles.listTitle, { color: theme.colors.text }]}>
         Seus Filmes Favoritos
       </Text>
+      <Text style={[styles.listSubtitle, { color: theme.colors.secondaryText }]}>
+        {favorites.length} {favorites.length === 1 ? 'filme' : 'filmes'} salvos
+      </Text>
+    </View>
+  );
+  
+  // Função para renderizar quando não está autenticado
+  const renderNotAuthenticated = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="person-outline" size={80} color={theme.colors.secondaryText} />
+      <Text style={[styles.emptyText, { color: theme.colors.secondaryText }]}>
+        Você precisa estar logado para ver seus favoritos
+      </Text>
+      <TouchableOpacity 
+        style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+        onPress={() => navigation.navigate('Login')}
+      >
+        <Text style={styles.actionButtonText}>Fazer Login</Text>
+      </TouchableOpacity>
     </View>
   );
   
@@ -114,12 +161,25 @@ export default function FavoritesScreen({ navigation }) {
       <Text style={[styles.emptyText, { color: theme.colors.secondaryText }]}>
         Você ainda não adicionou nenhum filme aos favoritos
       </Text>
+      <Text style={[styles.emptySubtext, { color: theme.colors.secondaryText }]}>
+        Explore filmes e toque no coração para salvá-los aqui
+      </Text>
       <TouchableOpacity 
-        style={[styles.browseButton, { backgroundColor: theme.colors.primary }]}
-        onPress={() => navigation.navigate('MoviesTab')}
+        style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+        onPress={() => navigation.navigate('Main', { screen: 'MoviesTab' })}
       >
-        <Text style={styles.browseButtonText}>Ver filmes</Text>
+        <Text style={styles.actionButtonText}>Descobrir Filmes</Text>
       </TouchableOpacity>
+    </View>
+  );
+  
+  // Função para renderizar estado de loading
+  const renderLoading = () => (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={theme.colors.primary} />
+      <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>
+        Carregando favoritos...
+      </Text>
     </View>
   );
   
@@ -127,21 +187,40 @@ export default function FavoritesScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
       
+      {/* Header */}
       <View style={[styles.header, { 
         backgroundColor: theme.colors.headerBackground, 
         borderBottomColor: theme.colors.border 
       }]}>
-        <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>Favoritos</Text>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={24} color={theme.colors.primary} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
+          Favoritos
+        </Text>
+        <View style={{ width: 24 }} />
       </View>
       
-      <FlatList
-        data={favorites}
-        renderItem={renderFavoriteItem}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContainer}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmptyList}
-      />
+      {/* Conteúdo */}
+      {!isAuthenticated ? (
+        renderNotAuthenticated()
+      ) : loading ? (
+        renderLoading()
+      ) : (
+        <FlatList
+          data={favorites}
+          renderItem={renderFavoriteItem}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={[
+            styles.listContainer,
+            favorites.length === 0 && { flex: 1 }
+          ]}
+          ListHeaderComponent={favorites.length > 0 ? renderHeader : null}
+          ListEmptyComponent={renderEmptyList}
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -152,9 +231,11 @@ const styles = StyleSheet.create({
     paddingTop: Constants.statusBarHeight,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
@@ -162,21 +243,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Ramabhadra_400Regular',
   },
   listContainer: {
-    flexGrow: 1,
     padding: 16,
   },
   listHeader: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   listTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 4,
     fontFamily: 'Ramabhadra_400Regular',
   },
+  listSubtitle: {
+    fontSize: 16,
+    fontFamily: 'EncodeSansExpanded_400Regular',
+  },
   favoriteItem: {
-    borderRadius: 10,
-    marginBottom: 12,
+    borderRadius: 12,
     overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   favoriteRow: {
     flexDirection: 'row',
@@ -204,17 +293,18 @@ const styles = StyleSheet.create({
   favoriteInfo: {
     flex: 1,
     marginLeft: 12,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
   },
   favoriteTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 6,
     fontFamily: 'Ramabhadra_400Regular',
   },
   favoriteMeta: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -230,10 +320,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
+  overviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'EncodeSansExpanded_400Regular',
+  },
   removeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
@@ -241,29 +336,48 @@ const styles = StyleSheet.create({
   removingButton: {
     opacity: 0.7,
   },
+  separator: {
+    height: 12,
+  },
+  // Estados vazios e loading
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    paddingTop: 50,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 18,
     textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 24,
+    marginTop: 20,
+    marginBottom: 8,
+    fontFamily: 'EncodeSansExpanded_500Medium',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 32,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
-  browseButton: {
-    paddingHorizontal: 24,
+  actionButton: {
+    paddingHorizontal: 32,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 25,
   },
-  browseButtonText: {
+  actionButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
     fontFamily: 'EncodeSansExpanded_500Medium',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontFamily: 'EncodeSansExpanded_400Regular',
   },
 });

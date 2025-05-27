@@ -1,3 +1,4 @@
+// src/screens/HomeScreen.js
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -11,146 +12,75 @@ import {
   ScrollView,
   TextInput,
   Dimensions,
-  KeyboardAvoidingView,
-  Platform
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../contexts/ThemeContext';
 
-// O correto seria usar um .env, mas para o propósito do projeto isso vai servir
-const TMDB_API_KEY = "96b2227903ddc79337303ec7ebeb4b1e";
+import { useTheme } from '../contexts/ThemeContext';
+import { useMovies, useMovieSearch } from '../hooks/useMovies';
+import { tmdbApi } from '../services/tmdbApi';
 
 export default function HomeScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const [nowPlayingMovies, setNowPlayingMovies] = useState([]);
-  const [popularMovies, setPopularMovies] = useState([]);
-  const [topRatedMovies, setTopRatedMovies] = useState([]);
+  const { 
+    nowPlayingMovies, 
+    popularMovies, 
+    topRatedMovies, 
+    loading, 
+    error, 
+    refreshMovies 
+  } = useMovies();
+  
+  const {
+    searchResults,
+    loading: searching,
+    searchMovies,
+    clearSearch
+  } = useMovieSearch();
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searching, setSearching] = useState(false);
-  const [error, setError] = useState(null);
   const [showResults, setShowResults] = useState(false);
 
-  // Obter dimensões da tela
-  const screenHeight = Dimensions.get('window').height;
-  const screenWidth = Dimensions.get('window').width;
-
-  useEffect(() => {
-    const fetchMovies = async () => {
-      setLoading(true);
-      setError(null);
-      
-      try {
-        // Buscar filmes em cartaz
-        const nowPlayingResponse = await fetch(
-          `https://api.themoviedb.org/3/movie/now_playing?api_key=${TMDB_API_KEY}&language=pt-BR&page=1`
-        );
-        const nowPlayingData = await nowPlayingResponse.json();
-        setNowPlayingMovies(nowPlayingData.results || []);
-        
-        // Buscar filmes populares
-        const popularResponse = await fetch(
-          `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=pt-BR&page=1`
-        );
-        const popularData = await popularResponse.json();
-        setPopularMovies(popularData.results || []);
-        
-        // Buscar filmes mais bem avaliados
-        const topRatedResponse = await fetch(
-          `https://api.themoviedb.org/3/movie/top_rated?api_key=${TMDB_API_KEY}&language=pt-BR&page=1`
-        );
-        const topRatedData = await topRatedResponse.json();
-        setTopRatedMovies(topRatedData.results || []);
-      } catch (err) {
-        console.error('Erro ao carregar filmes:', err);
-        setError('Falha ao carregar dados de filmes');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchMovies();
-  }, []);
-
-  // Função para pesquisar filmes
-  const searchMovies = async (query) => {
-    if (!query) {
-      setSearchResults([]);
-      setShowResults(false);
-      return;
-    }
-    
-    setSearching(true);
-    setError(null);
-    
-    try {
-      const searchResponse = await fetch(
-        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=pt-BR`
-      );
-      
-      const searchData = await searchResponse.json();
-      
-      if (searchData.results && searchData.results.length > 0) {
-        setSearchResults(searchData.results.slice(0, 20)); // Limitamos a 20 resultados
-        setShowResults(true);
-      } else {
-        setSearchResults([]);
-        setShowResults(true);
-      }
-    } catch (err) {
-      setError('Erro ao buscar filmes');
-      console.error('Error searching movies:', err);
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  // Efeito para pesquisar enquanto digita (com debounce)
+  // Debounce da pesquisa
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
       if (searchQuery.length >= 2) {
         searchMovies(searchQuery);
+        setShowResults(true);
       } else if (searchQuery.length === 0) {
-        setSearchResults([]);
+        clearSearch();
         setShowResults(false);
       }
-    }, 500); // Espera 500ms após o último caractere digitado
+    }, 500);
 
     return () => clearTimeout(debounceTimer);
   }, [searchQuery]);
 
-  const handleSearch = () => {
-    if (searchQuery.length >= 2) {
-      searchMovies(searchQuery);
+  const handleMoviePress = (movieId) => {
+    // Limpar pesquisa ao navegar
+    if (showResults) {
+      setSearchQuery('');
+      clearSearch();
+      setShowResults(false);
     }
+    navigation.navigate('MovieDetails', { movieId });
   };
 
-  // Função para limpar a pesquisa
-  const clearSearch = () => {
+  const handleClearSearch = () => {
     setSearchQuery('');
-    setSearchResults([]);
-    setShowResults(false);
-  };
-
-  // Navegação para detalhes do filme
-  const navigateToMovieDetails = (movieId) => {
-    // Se estiver pesquisando, limpe a pesquisa ao navegar
     clearSearch();
-    navigation.navigate('Movies', { movieId });
+    setShowResults(false);
   };
 
   const renderMovieItem = ({ item }) => (
     <TouchableOpacity
       style={styles.movieCard}
-      onPress={() => navigateToMovieDetails(item.id)}
+      onPress={() => handleMoviePress(item.id)}
     >
       {item.poster_path ? (
         <Image
-          source={{ uri: `https://image.tmdb.org/t/p/w300${item.poster_path}` }}
+          source={{ uri: tmdbApi.getImageUrl(item.poster_path, 'w300') }}
           style={styles.posterImage}
           resizeMode="cover"
         />
@@ -182,12 +112,12 @@ export default function HomeScreen({ navigation }) {
         borderBottomColor: theme.colors.divider, 
         backgroundColor: theme.colors.card 
       }]}
-      onPress={() => navigateToMovieDetails(item.id)}
+      onPress={() => handleMoviePress(item.id)}
     >
       <View style={styles.searchResultRow}>
         {item.poster_path ? (
           <Image 
-            source={{ uri: `https://image.tmdb.org/t/p/w92${item.poster_path}` }} 
+            source={{ uri: tmdbApi.getImageUrl(item.poster_path, 'w92') }} 
             style={styles.searchResultImage} 
           />
         ) : (
@@ -196,7 +126,9 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
         <View style={styles.searchResultInfo}>
-          <Text style={[styles.searchResultTitle, { color: theme.colors.text }]}>{item.title}</Text>
+          <Text style={[styles.searchResultTitle, { color: theme.colors.text }]}>
+            {item.title}
+          </Text>
           <Text style={[styles.searchResultYear, { color: theme.colors.secondaryText }]}>
             {item.release_date ? `(${new Date(item.release_date).getFullYear()})` : ''}
           </Text>
@@ -232,15 +164,22 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
       
-      <View style={[styles.header, { backgroundColor: theme.colors.headerBackground, borderBottomColor: theme.colors.border }]}>
+      {/* Header */}
+      <View style={[styles.header, { 
+        backgroundColor: theme.colors.headerBackground, 
+        borderBottomColor: theme.colors.border 
+      }]}>
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={24} color={theme.colors.primary} />
+        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>MovieBox</Text>
+        <View style={{ width: 24 }} />
       </View>
       
-      {/* Barra de pesquisa - Sempre visível */}
+      {/* Search Bar */}
       <View style={[styles.searchContainer, { 
         backgroundColor: theme.colors.headerBackground, 
         borderBottomColor: theme.colors.border,
-        zIndex: 10 // Garante que a barra de pesquisa fique acima
       }]}>
         <View style={[
           styles.searchInputContainer, 
@@ -257,19 +196,18 @@ export default function HomeScreen({ navigation }) {
             value={searchQuery}
             onChangeText={setSearchQuery}
             returnKeyType="search"
-            onSubmitEditing={handleSearch}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+            <TouchableOpacity onPress={handleClearSearch} style={styles.clearButton}>
               <Ionicons name="close-circle" size={20} color={theme.colors.secondaryText} />
             </TouchableOpacity>
           )}
         </View>
       </View>
       
-      {/* Conteúdo principal ou resultados de pesquisa */}
+      {/* Content */}
       {showResults ? (
-        // Resultados da pesquisa em uma FlatList completa
+        // Search Results
         <View style={{ flex: 1 }}>
           {searching ? (
             <View style={styles.searchingContainer}>
@@ -298,17 +236,11 @@ export default function HomeScreen({ navigation }) {
               <Text style={[styles.noResultsText, { color: theme.colors.secondaryText }]}>
                 Nenhum filme encontrado para "{searchQuery}"
               </Text>
-              <TouchableOpacity 
-                style={[styles.backToHomeButton, { backgroundColor: theme.colors.primary }]}
-                onPress={clearSearch}
-              >
-                <Text style={styles.backToHomeButtonText}>Voltar</Text>
-              </TouchableOpacity>
             </View>
           )}
         </View>
       ) : (
-        // Conteúdo normal da tela inicial
+        // Main Content
         loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -321,7 +253,7 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity 
               style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
-              onPress={() => navigation.replace('Home')}
+              onPress={refreshMovies}
             >
               <Text style={styles.retryButtonText}>Tentar novamente</Text>
             </TouchableOpacity>
@@ -344,9 +276,11 @@ const styles = StyleSheet.create({
     paddingTop: Constants.statusBarHeight,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 22,
@@ -356,8 +290,8 @@ const styles = StyleSheet.create({
   searchContainer: {
     padding: 12,
     borderBottomWidth: 1,
-    elevation: 3, // Adiciona sombra no Android
-    shadowColor: '#000', // Sombra no iOS
+    elevation: 3,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -382,11 +316,8 @@ const styles = StyleSheet.create({
   clearButton: {
     padding: 4,
   },
-  // Estilo para a seção de pesquisa
+  // Search Results
   searchHeaderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 16,
     paddingBottom: 8,
   },
@@ -394,17 +325,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     fontFamily: 'Ramabhadra_400Regular',
-  },
-  backToHomeButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-  },
-  backToHomeButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
-    fontFamily: 'EncodeSansExpanded_500Medium',
   },
   searchResultsContainer: {
     paddingHorizontal: 16,
@@ -461,7 +381,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
-  // Container para quando está pesquisando
+  // Loading states
   searchingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -472,7 +392,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
-  // Container para quando não há resultados
   noResultsContainer: {
     flex: 1,
     alignItems: 'center',
@@ -484,9 +403,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginVertical: 20,
     fontFamily: 'EncodeSansExpanded_400Regular',
-  },
-  scrollView: {
-    flex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -520,6 +436,10 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontFamily: 'EncodeSansExpanded_500Medium',
+  },
+  // Movie sections
+  scrollView: {
+    flex: 1,
   },
   section: {
     marginVertical: 16,

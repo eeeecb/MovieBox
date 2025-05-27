@@ -1,69 +1,109 @@
+// src/screens/ActorScreen.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, SafeAreaView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  Image, 
+  ScrollView, 
+  SafeAreaView, 
+  TouchableOpacity, 
+  ActivityIndicator 
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../contexts/ThemeContext';
 
-// O correto seria usar um .env, mas para o propósito do projeto isso vai servir
-const TMDB_API_KEY = "96b2227903ddc79337303ec7ebeb4b1e";
+import { useTheme } from '../contexts/ThemeContext';
+import { tmdbApi } from '../services/tmdbApi';
+
+// Hook personalizado para dados do ator
+const useActorDetails = (actorId) => {
+  const [actorDetails, setActorDetails] = useState(null);
+  const [actorFilmography, setActorFilmography] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!actorId) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchActorData = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const [actorResult, moviesResult] = await Promise.all([
+          tmdbApi.getActorDetails(actorId),
+          tmdbApi.getActorMovies(actorId)
+        ]);
+
+        if (actorResult.success) {
+          setActorDetails(actorResult.data);
+        } else {
+          setError(actorResult.error);
+        }
+
+        if (moviesResult.success) {
+          // Ordenar por data de lançamento e pegar os 10 mais recentes
+          const sortedMovies = moviesResult.data
+            .sort((a, b) => new Date(b.release_date || '1900') - new Date(a.release_date || '1900'))
+            .slice(0, 10);
+          setActorFilmography(sortedMovies);
+        }
+      } catch (err) {
+        setError('Erro ao buscar dados do ator');
+        console.error('Error fetching actor data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchActorData();
+  }, [actorId]);
+
+  const refetch = () => {
+    if (actorId) {
+      fetchActorData();
+    }
+  };
+
+  return {
+    actorDetails,
+    actorFilmography,
+    loading,
+    error,
+    refetch
+  };
+};
 
 export default function ActorScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
-  const [actorDetails, setActorDetails] = useState(null);
-  const [actorFilmography, setActorFilmography] = useState([]);
-  const [loadingActor, setLoadingActor] = useState(true);
-  const [errorActor, setErrorActor] = useState(null);
   
   // ID do ator recebido da tela anterior
   const { actorId } = route.params || { actorId: 3 };
   
-  // Função para buscar detalhes do ator
-  const fetchActorDetails = async (id) => {
-    if (!id) return;
-    
-    setLoadingActor(true);
-    setErrorActor(null);
-    
-    try {
-      // Buscar detalhes do ator
-      const actorResponse = await fetch(
-        `https://api.themoviedb.org/3/person/${id}?api_key=${TMDB_API_KEY}&language=pt-BR`
-      );
-      
-      const actorData = await actorResponse.json();
-      setActorDetails(actorData);
-      
-      // Buscar filmografia do ator
-      const creditsResponse = await fetch(
-        `https://api.themoviedb.org/3/person/${id}/movie_credits?api_key=${TMDB_API_KEY}&language=pt-BR`
-      );
-      
-      const creditsData = await creditsResponse.json();
-      setActorFilmography(creditsData.cast.sort((a, b) => 
-        new Date(b.release_date || '1900') - new Date(a.release_date || '1900')
-      ).slice(0, 10)); // Pegar os 10 filmes mais recentes
-    } catch (err) {
-      setErrorActor('Erro ao buscar dados do ator');
-      console.error('Error fetching actor data:', err);
-    } finally {
-      setLoadingActor(false);
-    }
-  };
+  // Hook personalizado para dados do ator
+  const { 
+    actorDetails, 
+    actorFilmography, 
+    loading, 
+    error, 
+    refetch 
+  } = useActorDetails(actorId);
 
-  useEffect(() => {
-    fetchActorDetails(actorId);
-  }, [actorId]);
-
+  // Função para formatar data
   const formatDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR');
   };
   
-  // Descrições extensas para cada ator (30+ palavras cada)
-  const getActorDescription = (id) => {
-    // Se não tivermos uma descrição personalizada, usamos a bio da API
+  // Descrições extensas para atores (caso a biografia da API não esteja disponível)
+  const getActorDescription = () => {
+    // Se temos uma descrição da API, usamos ela
     if (actorDetails && actorDetails.biography) {
       return actorDetails.biography;
     }
@@ -76,7 +116,8 @@ export default function ActorScreen({ route, navigation }) {
       74568: "Margot Robbie, nascida em 2 de julho de 1990 em Queensland, Austrália, rapidamente ascendeu em Hollywood após sua atuação em 'O Lobo de Wall Street' (2013). Ganhou notoriedade por seus papéis complexos em filmes como 'Eu, Tonya' e por sua interpretação de Arlequina nos filmes do universo DC. Além de atuar, fundou a produtora LuckyChap Entertainment, com o objetivo de promover projetos liderados por mulheres na indústria do cinema.",
       287: "William Bradley Pitt, nascido em 18 de dezembro de 1963 em Oklahoma, é um ator e produtor cinematográfico americano que conquistou fama mundial por sua versatilidade e aparência carismática. Vencedor do Oscar por sua atuação em 'Era Uma Vez em Hollywood' (2019) e como produtor de '12 Anos de Escravidão' (2013). Foi casado com as atrizes Jennifer Aniston e Angelina Jolie, com quem tem seis filhos. Além de atuar, fundou a produtora Plan B Entertainment, responsável por diversos filmes aclamados pela crítica."
     };
-    return descriptions[id] || "Informações biográficas não disponíveis.";
+    
+    return descriptions[actorId] || "Informações biográficas não disponíveis.";
   };
   
   // Renderizar um item de filmografia
@@ -84,15 +125,12 @@ export default function ActorScreen({ route, navigation }) {
     <TouchableOpacity 
       key={movie.id} 
       style={[styles.movieItem, { backgroundColor: theme.colors.card }]}
-      onPress={() => {
-        // Navegamos para a tela de Movies e enviamos o movieId como parâmetro
-        navigation.navigate('Movies', { movieId: movie.id });
-      }}
+      onPress={() => navigation.navigate('MovieDetails', { movieId: movie.id })}
     >
       <View style={styles.movieRow}>
         {movie.poster_path ? (
           <Image 
-            source={{ uri: `https://image.tmdb.org/t/p/w92${movie.poster_path}` }} 
+            source={{ uri: tmdbApi.getImageUrl(movie.poster_path, 'w92') }} 
             style={styles.moviePoster} 
           />
         ) : (
@@ -101,7 +139,9 @@ export default function ActorScreen({ route, navigation }) {
           </View>
         )}
         <View style={styles.movieInfo}>
-          <Text style={[styles.movieTitle, { color: theme.colors.text }]}>{movie.title}</Text>
+          <Text style={[styles.movieTitle, { color: theme.colors.text }]}>
+            {movie.title}
+          </Text>
           <Text style={[styles.movieDate, { color: theme.colors.secondaryText }]}>
             {formatDate(movie.release_date)}
           </Text>
@@ -109,7 +149,7 @@ export default function ActorScreen({ route, navigation }) {
             {movie.character ? `Como: ${movie.character}` : 'Papel não informado'}
           </Text>
         </View>
-        <Text style={[styles.chevron, { color: theme.colors.secondaryText }]}>›</Text>
+        <Ionicons name="chevron-forward" size={20} color={theme.colors.secondaryText} />
       </View>
     </TouchableOpacity>
   );
@@ -118,6 +158,7 @@ export default function ActorScreen({ route, navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
       
+      {/* Header */}
       <View style={[styles.header, { 
         backgroundColor: theme.colors.headerBackground,
         borderBottomColor: theme.colors.border
@@ -125,29 +166,38 @@ export default function ActorScreen({ route, navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={theme.colors.primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>Perfil do Ator</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
+          Perfil do Ator
+        </Text>
+        <View style={{ width: 28 }} />
       </View>
       
-      {loadingActor ? (
+      {/* Conteúdo */}
+      {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>
             Carregando perfil do ator...
           </Text>
         </View>
-      ) : errorActor ? (
+      ) : error ? (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{errorActor}</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
+            onPress={refetch}
+          >
+            <Text style={styles.retryButtonText}>Tentar novamente</Text>
+          </TouchableOpacity>
         </View>
       ) : actorDetails ? (
         <ScrollView style={styles.scrollView}>
+          {/* Card do ator */}
           <View style={[styles.actorCard, { backgroundColor: theme.colors.card }]}>
             <View style={styles.actorHeader}>
               {actorDetails.profile_path ? (
                 <Image 
-                  source={{ 
-                    uri: `https://image.tmdb.org/t/p/w300${actorDetails.profile_path}` 
-                  }} 
+                  source={{ uri: tmdbApi.getImageUrl(actorDetails.profile_path, 'w300') }} 
                   style={styles.actorProfileImage} 
                 />
               ) : (
@@ -168,29 +218,39 @@ export default function ActorScreen({ route, navigation }) {
               </View>
             </View>
             
+            {/* Biografia */}
             <View style={styles.actorBio}>
               <Text style={[styles.actorBioText, { color: theme.colors.text }]}>
-                {getActorDescription(actorId)}
+                {getActorDescription()}
               </Text>
             </View>
             
-            <View style={[styles.actorDetails, { backgroundColor: isDark ? '#2A2A2A' : '#f9f9f9' }]}>
+            {/* Detalhes do ator */}
+            <View style={[styles.actorDetails, { 
+              backgroundColor: isDark ? '#2A2A2A' : '#f9f9f9' 
+            }]}>
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.text }]}>Sexo:</Text>
+                <Text style={[styles.detailLabel, { color: theme.colors.text }]}>
+                  Sexo:
+                </Text>
                 <Text style={[styles.detailValue, { color: theme.colors.text }]}>
                   {actorDetails.gender === 1 ? 'Feminino' : 'Masculino'}
                 </Text>
               </View>
               
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.text }]}>Data de Nascimento:</Text>
+                <Text style={[styles.detailLabel, { color: theme.colors.text }]}>
+                  Data de Nascimento:
+                </Text>
                 <Text style={[styles.detailValue, { color: theme.colors.text }]}>
                   {formatDate(actorDetails.birthday)}
                 </Text>
               </View>
               
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.text }]}>Local de Nascimento:</Text>
+                <Text style={[styles.detailLabel, { color: theme.colors.text }]}>
+                  Local de Nascimento:
+                </Text>
                 <Text style={[styles.detailValue, { color: theme.colors.text }]}>
                   {actorDetails.place_of_birth || 'Não informado'}
                 </Text>
@@ -198,8 +258,11 @@ export default function ActorScreen({ route, navigation }) {
             </View>
           </View>
           
+          {/* Seção de filmografia */}
           <View style={styles.filmographySection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Filmes</Text>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              Filmes
+            </Text>
             
             {actorFilmography.length > 0 ? (
               actorFilmography.map(movie => renderFilmographyItem(movie))
@@ -227,13 +290,13 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginLeft: 16,
     fontFamily: 'Ramabhadra_400Regular',
   },
   loadingContainer: {
@@ -256,7 +319,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'red',
     textAlign: 'center',
+    marginBottom: 16,
     fontFamily: 'EncodeSansExpanded_400Regular',
+  },
+  retryButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontFamily: 'EncodeSansExpanded_500Medium',
   },
   scrollView: {
     flex: 1,
@@ -387,11 +461,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
     fontFamily: 'EncodeSansExpanded_400Regular',
-  },
-  chevron: {
-    fontSize: 30,
-    position: 'absolute',
-    right: 15,
   },
   noDataText: {
     fontSize: 16,
