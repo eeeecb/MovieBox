@@ -118,8 +118,8 @@ export default function ProfileScreen({ navigation }) {
         backgroundColor: theme.colors.headerBackground,
         borderBottomColor: theme.colors.border 
       }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={28} color={theme.colors.primary} />
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={24} color={theme.colors.primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
           Perfil

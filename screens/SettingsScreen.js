@@ -251,13 +251,13 @@ export default function SettingsScreen({ navigation }) {
         backgroundColor: theme.colors.headerBackground,
         borderBottomColor: theme.colors.border 
       }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={28} color={theme.colors.primary} />
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={24} color={theme.colors.primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
           Configurações
         </Text>
-        <View style={{ width: 28 }} />
+        <View style={{ width: 24 }} />
       </View>
       
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
