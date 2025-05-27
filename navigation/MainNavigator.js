@@ -99,8 +99,30 @@ function DrawerNavigator() {
           backgroundColor: theme.colors.card,
           width: 280,
         },
+        drawerContentOptions: {
+          contentContainerStyle: {
+            padding: 0,
+            margin: 0,
+            paddingHorizontal: 0,
+            paddingVertical: 0,
+          },
+          style: {
+            padding: 0,
+            margin: 0,
+            paddingHorizontal: 0,
+            paddingVertical: 0,
+          },
+        },
         drawerActiveTintColor: theme.colors.primary,
         drawerInactiveTintColor: theme.colors.text,
+        drawerItemStyle: {
+          marginHorizontal: 0,
+          paddingHorizontal: 12,
+          marginVertical: 4,
+        },
+        drawerLabelStyle: {
+          marginLeft: -16,
+        },
       }}
     >
       <Drawer.Screen 

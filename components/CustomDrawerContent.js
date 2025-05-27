@@ -6,20 +6,18 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
-  Alert
+  Alert,
+  ScrollView
 } from 'react-native';
-import {
-  DrawerContentScrollView,
-  DrawerItemList,
-  DrawerItem,
-} from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CustomDrawerContent(props) {
   const { theme } = useTheme();
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const handleLogout = () => {
     Alert.alert(
@@ -43,55 +41,120 @@ export default function CustomDrawerContent(props) {
     );
   };
 
+  const navigateTo = (screenName) => {
+    props.navigation.navigate(screenName);
+  };
+
+  const menuItems = [
+    {
+      label: 'Início',
+      icon: 'home-outline',
+      onPress: () => navigateTo('Main'),
+      isActive: props.state.routeNames[props.state.index] === 'Main'
+    },
+    {
+      label: 'Perfil',
+      icon: 'person-outline',
+      onPress: () => navigateTo('Profile'),
+      isActive: props.state.routeNames[props.state.index] === 'Profile'
+    },
+    {
+      label: 'Configurações',
+      icon: 'settings-outline',
+      onPress: () => navigateTo('Settings'),
+      isActive: props.state.routeNames[props.state.index] === 'Settings'
+    },
+    {
+      label: 'Sair',
+      icon: 'log-out-outline',
+      onPress: handleLogout,
+      isActive: false,
+      isLogout: true
+    }
+  ];
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.card }]}>
-      <DrawerContentScrollView {...props}>
-        {/* Header do Drawer com informações do usuário */}
-        <View style={[styles.userInfoSection, { backgroundColor: theme.colors.primary }]}>
-          <TouchableOpacity 
-            style={styles.userInfo}
-            onPress={() => props.navigation.navigate('Profile')}
-          >
-            {user?.photoURL ? (
-              <Image 
-                source={{ uri: user.photoURL }} 
-                style={styles.avatar} 
-              />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>
-                  {user?.displayName?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
-                </Text>
-              </View>
-            )}
-            
-            <View style={styles.userDetails}>
-              <Text style={styles.userName}>
-                {user?.displayName || 'Usuário'}
-              </Text>
-              <Text style={styles.userEmail}>
-                {user?.email || 'email@exemplo.com'}
+    <View style={[styles.container, { 
+      backgroundColor: theme.colors.card,
+      paddingTop: insets.top 
+    }]}>
+      {/* Header do Drawer com informações do usuário */}
+      <View style={[styles.userInfoSection, { backgroundColor: theme.colors.primary }]}>
+        <TouchableOpacity 
+          style={styles.userInfo}
+          onPress={() => navigateTo('Profile')}
+        >
+          {user?.photoURL ? (
+            <Image 
+              source={{ uri: user.photoURL }} 
+              style={styles.avatar} 
+            />
+          ) : (
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.avatarText}>
+                {user?.displayName?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
               </Text>
             </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Itens do menu */}
-        <View style={styles.drawerSection}>
-          <DrawerItemList {...props} />
+          )}
           
-          {/* Item customizado para logout */}
-          <DrawerItem
-            label="Sair"
-            onPress={handleLogout}
-            icon={({ color, size }) => (
-              <Ionicons name="log-out-outline" size={size} color={color} />
-            )}
-            labelStyle={{ color: theme.colors.text }}
-            activeBackgroundColor="transparent"
-          />
+          <View style={styles.userDetails}>
+            <Text style={styles.userName}>
+              {user?.displayName || 'Usuário'}
+            </Text>
+            <Text style={styles.userEmail}>
+              {user?.email || 'email@exemplo.com'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* ScrollView para os itens do menu */}
+      <ScrollView 
+        style={styles.menuScrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.menuContent}
+      >
+        <View style={styles.menuSection}>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.menuItem,
+                item.isActive && [styles.activeMenuItem, { backgroundColor: `${theme.colors.primary}20` }],
+                item.isLogout && styles.logoutMenuItem
+              ]}
+              onPress={item.onPress}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuItemContent}>
+                <Ionicons 
+                  name={item.icon} 
+                  size={24} 
+                  color={
+                    item.isLogout 
+                      ? theme.colors.error 
+                      : item.isActive 
+                        ? theme.colors.primary 
+                        : theme.colors.text
+                  } 
+                />
+                <Text style={[
+                  styles.menuItemLabel,
+                  { 
+                    color: item.isLogout 
+                      ? theme.colors.error 
+                      : item.isActive 
+                        ? theme.colors.primary 
+                        : theme.colors.text
+                  }
+                ]}>
+                  {item.label}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>
-      </DrawerContentScrollView>
+      </ScrollView>
 
       {/* Footer do Drawer */}
       <View style={[styles.bottomDrawerSection, { borderTopColor: theme.colors.border }]}>
@@ -106,11 +169,12 @@ export default function CustomDrawerContent(props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    margin: 0,
+    padding: 0,
   },
   userInfoSection: {
     paddingVertical: 20,
     paddingHorizontal: 16,
-    marginBottom: 8,
   },
   userInfo: {
     flexDirection: 'row',
@@ -144,15 +208,50 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 4,
-    fontFamily: 'Nunito_400Regular',
+    fontFamily: 'Ramabhadra_400Regular',
   },
   userEmail: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.8)',
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
-  drawerSection: {
+  menuScrollView: {
+    flex: 1,
+    padding: 0,
+    margin: 0,
+  },
+  menuContent: {
+    padding: 0,
+    margin: 0,
+  },
+  menuSection: {
+    paddingTop: 8,
+    padding: 0,
+    margin: 0,
+  },
+  menuItem: {
+    marginHorizontal: 0,
+    marginVertical: 2,
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  activeMenuItem: {
+    marginHorizontal: 12,
+  },
+  logoutMenuItem: {
     marginTop: 8,
+  },
+  menuItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  menuItemLabel: {
+    fontSize: 16,
+    marginLeft: 12,
+    fontFamily: 'EncodeSansExpanded_400Regular',
+    fontWeight: '500',
   },
   bottomDrawerSection: {
     paddingVertical: 16,
