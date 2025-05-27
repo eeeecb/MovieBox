@@ -1,3 +1,4 @@
+// src\contexts\ThemeContext.js
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -49,7 +50,13 @@ export const darkTheme = {
 const ThemeContext = createContext();
 
 // Hook personalizado para usar o tema
-export const useTheme = () => useContext(ThemeContext);
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme deve ser usado dentro de um ThemeProvider');
+  }
+  return context;
+};
 
 export const ThemeProvider = ({ children }) => {
   // Detectar o tema do sistema
@@ -57,7 +64,7 @@ export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(lightTheme);
   const [isThemeLoaded, setIsThemeLoaded] = useState(false);
   const [useSystemTheme, setUseSystemTheme] = useState(true);
-  const [lastManualTheme, setLastManualTheme] = useState('light'); // Novo estado para lembrar o tema manual
+  const [lastManualTheme, setLastManualTheme] = useState('light');
 
   // Carregar preferência de tema do AsyncStorage ao iniciar
   useEffect(() => {
@@ -168,7 +175,7 @@ export const ThemeProvider = ({ children }) => {
       setLightTheme,
       useSystemTheme,
       setSystemTheme,
-      lastManualTheme // Expor para debug se necessário
+      lastManualTheme
     }}>
       {children}
     </ThemeContext.Provider>
