@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   loadingContainer: {
     flex: 1,
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 8,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   actorPopularity: {
     fontSize: 16,
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 16,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   movieItem: {
     borderRadius: 10,
@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
   movieTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   movieDate: {
     fontSize: 14,

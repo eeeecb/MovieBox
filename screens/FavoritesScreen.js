@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   listContainer: {
     padding: 16,
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 4,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   listSubtitle: {
     fontSize: 16,
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 6,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   favoriteMeta: {
     flexDirection: 'row',

@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 4,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   userEmail: {
     fontSize: 14,

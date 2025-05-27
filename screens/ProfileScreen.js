@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   loadingContainer: {
     flex: 1,
@@ -364,7 +364,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 4,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   userEmail: {
     fontSize: 16,
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 8,
     marginBottom: 4,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   statLabel: {
     fontSize: 14,
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 16,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   actionItem: {
     flexDirection: 'row',

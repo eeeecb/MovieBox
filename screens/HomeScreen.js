@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
   searchResultsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   searchResultsContainer: {
     paddingHorizontal: 16,
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   searchResultTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   searchResultYear: {
     fontSize: 14,
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 16,
     marginBottom: 12,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   movieList: {
     paddingLeft: 16,

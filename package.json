@@ -11,8 +11,8 @@
   "dependencies": {
     "@expo-google-fonts/encode-sans-expanded": "^0.2.3",
     "@expo-google-fonts/exo": "^0.3.0",
+    "@expo-google-fonts/nunito": "^0.3.0",
     "@expo-google-fonts/orbitron": "^0.3.0",
-    "@expo-google-fonts/ramabhadra": "^0.2.3",
     "@expo/metro-runtime": "~5.0.4",
     "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "^2.1.2",

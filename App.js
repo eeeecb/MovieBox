@@ -2,7 +2,7 @@
 import React from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { useFonts, EncodeSansExpanded_400Regular, EncodeSansExpanded_500Medium } from '@expo-google-fonts/encode-sans-expanded';
-import { Ramabhadra_400Regular } from '@expo-google-fonts/ramabhadra';
+import { Nunito_400Regular } from '@expo-google-fonts/nunito';
 import { Exo_700Bold } from '@expo-google-fonts/exo';
 
 // Providers
@@ -17,7 +17,7 @@ export default function App() {
     Exo_700Bold,
     EncodeSansExpanded_400Regular,
     EncodeSansExpanded_500Medium,
-    Ramabhadra_400Regular
+    Nunito_400Regular
   });
 
   // Tela de loading enquanto as fontes carregam
