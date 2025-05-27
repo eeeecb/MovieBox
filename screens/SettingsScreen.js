@@ -273,12 +273,12 @@ export default function SettingsScreen({ navigation }) {
           <View style={styles.themePreviewContainer}>
             <ThemePreview 
               isDark={false} 
-              active={!isDark && !useSystemTheme}
+              active={useSystemTheme ? !isDark : (!isDark && !useSystemTheme)}
               onPress={setLightTheme}
             />
             <ThemePreview 
               isDark={true} 
-              active={isDark && !useSystemTheme}
+              active={useSystemTheme ? isDark : (isDark && !useSystemTheme)}
               onPress={setDarkTheme}
             />
           </View>
