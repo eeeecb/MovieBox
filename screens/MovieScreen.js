@@ -1,138 +1,83 @@
+// src/screens/MovieScreen.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Image, ScrollView, SafeAreaView, TouchableOpacity, TextInput, ActivityIndicator, FlatList } from 'react-native';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  Image, 
+  ScrollView, 
+  SafeAreaView, 
+  TouchableOpacity, 
+  TextInput, 
+  ActivityIndicator, 
+  FlatList,
+  Alert 
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
-import { useFonts, EncodeSansExpanded_400Regular, EncodeSansExpanded_500Medium } from '@expo-google-fonts/encode-sans-expanded';
-import { Ramabhadra_400Regular } from '@expo-google-fonts/ramabhadra';
-import { useTheme } from '../contexts/ThemeContext';
-import { useFavorites } from '../contexts/FavoritesContext';
 import { Ionicons } from '@expo/vector-icons';
 
-// O correto seria usar um .env, mas para o propósito do projeto isso vai servir
-const TMDB_API_KEY = "96b2227903ddc79337303ec7ebeb4b1e";
+import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../hooks/useAuth';
+import { useFavorites } from '../hooks/useFavorites';
+import { useMovieDetails, useMovieSearch } from '../hooks/useMovies';
+import { tmdbApi } from '../services/tmdbApi';
 
 export default function MovieScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
-  const { isFavorite, toggleFavorite } = useFavorites();
+  const { user } = useAuth();
+  const { toggleFavorite, isFavorite } = useFavorites(user?.uid);
   
   // Obter o ID do filme dos parâmetros de navegação
   const { movieId: paramMovieId } = route.params || {};
   
+  // Estados para pesquisa
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [movie, setMovie] = useState(null);
-  const [cast, setCast] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searching, setSearching] = useState(false);
-  const [error, setError] = useState(null);
   const [showResults, setShowResults] = useState(false);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
-
-  // Função para pesquisar filmes
-  const searchMovies = async (query) => {
-    if (!query) {
-      setSearchResults([]);
-      setShowResults(false);
-      return;
-    }
-    
-    setSearching(true);
-    setError(null);
-    
-    try {
-      const searchResponse = await fetch(
-        `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=pt-BR`
-      );
-      
-      const searchData = await searchResponse.json();
-      
-      if (searchData.results && searchData.results.length > 0) {
-        setSearchResults(searchData.results.slice(0, 10)); // Limitamos a 10 resultados
-        setShowResults(true);
-      } else {
-        setSearchResults([]);
-        setError('Nenhum filme encontrado');
-      }
-    } catch (err) {
-      setError('Erro ao buscar filmes');
-      console.error('Error searching movies:', err);
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  // Função para selecionar e carregar um filme específico
-  const loadMovie = async (movieId) => {
-    setLoading(true);
-    setError(null);
-    setShowResults(false);
-    
-    try {
-      const movieResponse = await fetch(
-        `https://api.themoviedb.org/3/movie/${movieId}?api_key=${TMDB_API_KEY}&language=pt-BR`
-      );
-      
-      const movieData = await movieResponse.json();
-      setMovie(movieData);
-      
-      const creditsResponse = await fetch(
-        `https://api.themoviedb.org/3/movie/${movieId}/credits?api_key=${TMDB_API_KEY}&language=pt-BR`
-      );
-      
-      const creditsData = await creditsResponse.json();
-      setCast(creditsData.cast.slice(0, 6));
-    } catch (err) {
-      setError('Erro ao buscar dados do filme');
-      console.error('Error fetching movie data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Função para lidar com seleção de filme nos resultados
-  const handleMovieSelect = (movieId) => {
-    loadMovie(movieId);
-    // Limpa a barra de pesquisa
-    setSearchQuery('');
-  };
-
-  // Carrega o filme quando o ID é fornecido via navegação ou carrega um filme popular aleatório
-  useEffect(() => {
-    if (paramMovieId) {
-      // Se temos um ID específico nos parâmetros, carregamos esse filme
-      loadMovie(paramMovieId);
-    } else {
-      // Caso contrário, carregamos um filme popular aleatório
-      const popularMovieIds = [505642, 447365, 299534, 299536, 920, 429617];
-      const randomIndex = Math.floor(Math.random() * popularMovieIds.length);
-      loadMovie(popularMovieIds[randomIndex]);
-    }
-  }, [paramMovieId]);
+  
+  // Hooks para dados do filme e pesquisa
+  const { movie, cast, loading, error, refetch } = useMovieDetails(paramMovieId);
+  const { 
+    searchResults, 
+    loading: searching, 
+    searchMovies, 
+    clearSearch 
+  } = useMovieSearch();
 
   // Efeito para pesquisar enquanto digita (com debounce)
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
       if (searchQuery.length >= 2) {
         searchMovies(searchQuery);
+        setShowResults(true);
       } else if (searchQuery.length === 0) {
-        setSearchResults([]);
+        clearSearch();
         setShowResults(false);
       }
-    }, 500); // Espera 500ms após o último caractere digitado
+    }, 500);
 
     return () => clearTimeout(debounceTimer);
   }, [searchQuery]);
 
-  const handleSearch = () => {
-    if (searchQuery.length >= 2) {
-      searchMovies(searchQuery);
-    }
+  // Função para selecionar filme da pesquisa
+  const handleMovieSelect = (movieId) => {
+    // Navegar para o novo filme
+    navigation.push('MovieDetails', { movieId });
+    // Limpar pesquisa
+    setSearchQuery('');
+    clearSearch();
+    setShowResults(false);
   };
 
   // Função para alternar favorito
   const handleToggleFavorite = async () => {
-    if (!movie || isTogglingFavorite) return;
+    if (!movie || isTogglingFavorite || !user) {
+      if (!user) {
+        Alert.alert('Login necessário', 'Você precisa estar logado para adicionar favoritos');
+      }
+      return;
+    }
     
     setIsTogglingFavorite(true);
     
@@ -142,17 +87,24 @@ export default function MovieScreen({ route, navigation }) {
         title: movie.title,
         poster_path: movie.poster_path,
         vote_average: movie.vote_average,
-        release_date: movie.release_date
+        release_date: movie.release_date,
+        overview: movie.overview
       };
       
-      await toggleFavorite(movieInfo);
+      const result = await toggleFavorite(movieInfo);
+      
+      if (!result.success) {
+        Alert.alert('Erro', result.error || 'Erro ao atualizar favoritos');
+      }
     } catch (error) {
       console.error('Erro ao alternar favorito:', error);
+      Alert.alert('Erro', 'Erro inesperado ao atualizar favoritos');
     } finally {
       setIsTogglingFavorite(false);
     }
   };
 
+  // Funções de formatação
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -176,7 +128,7 @@ export default function MovieScreen({ route, navigation }) {
       <View style={styles.searchResultRow}>
         {item.poster_path ? (
           <Image 
-            source={{ uri: `https://image.tmdb.org/t/p/w92${item.poster_path}` }} 
+            source={{ uri: tmdbApi.getImageUrl(item.poster_path, 'w92') }} 
             style={styles.searchResultImage} 
           />
         ) : (
@@ -185,7 +137,9 @@ export default function MovieScreen({ route, navigation }) {
           </View>
         )}
         <View style={styles.searchResultInfo}>
-          <Text style={[styles.searchResultTitle, { color: theme.colors.text }]}>{item.title}</Text>
+          <Text style={[styles.searchResultTitle, { color: theme.colors.text }]}>
+            {item.title}
+          </Text>
           <Text style={[styles.searchResultYear, { color: theme.colors.secondaryText }]}>
             {item.release_date ? `(${new Date(item.release_date).getFullYear()})` : ''}
           </Text>
@@ -201,93 +155,123 @@ export default function MovieScreen({ route, navigation }) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
       
-      <View style={[styles.header, { backgroundColor: theme.colors.headerBackground, borderBottomColor: theme.colors.border }]}>
+      {/* Header */}
+      <View style={[styles.header, { 
+        backgroundColor: theme.colors.headerBackground, 
+        borderBottomColor: theme.colors.border 
+      }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={[styles.backButton, { color: theme.colors.primary }]}>←</Text>
+          <Ionicons name="chevron-back" size={28} color={theme.colors.primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>Detalhes</Text>
+        <View style={{ width: 28 }} />
       </View>
         
-        {/* barra de pesquisa */}
-        <View style={[styles.searchContainer, { backgroundColor: theme.colors.headerBackground, borderBottomColor: theme.colors.border }]}>
+      {/* Barra de pesquisa */}
+      <View style={[styles.searchContainer, { 
+        backgroundColor: theme.colors.headerBackground, 
+        borderBottomColor: theme.colors.border 
+      }]}>
+        <View style={[
+          styles.searchInputContainer,
+          {
+            backgroundColor: theme.colors.inputBackground,
+            borderColor: theme.colors.inputBorder
+          }
+        ]}>
+          <Ionicons name="search" size={20} color={theme.colors.secondaryText} style={styles.searchIcon} />
           <TextInput
-            style={[
-              styles.searchInput, 
-              { 
-                backgroundColor: theme.colors.inputBackground, 
-                borderColor: theme.colors.inputBorder,
-                color: theme.colors.text
-              }
-            ]}
+            style={[styles.searchInput, { color: theme.colors.text }]}
             placeholder="Buscar filme..."
             placeholderTextColor={theme.colors.secondaryText}
             value={searchQuery}
             onChangeText={setSearchQuery}
             returnKeyType="search"
-            onSubmitEditing={handleSearch}
           />
-          <TouchableOpacity 
-            style={styles.searchButton} 
-            onPress={handleSearch}
-            disabled={searchQuery.length < 2}
-          >
-            <Text style={[
-              styles.searchButtonText, 
-              searchQuery.length < 2 ? styles.searchButtonDisabled : null
-            ]}>Buscar</Text>
-          </TouchableOpacity>
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              onPress={() => {
+                setSearchQuery('');
+                clearSearch();
+                setShowResults(false);
+              }}
+              style={styles.clearButton}
+            >
+              <Ionicons name="close-circle" size={20} color={theme.colors.secondaryText} />
+            </TouchableOpacity>
+          )}
         </View>
+      </View>
 
-        {/* Resultados da pesquisa */}
-        {showResults && (
-          <View style={[
-            styles.searchResultsContainer, 
-            { 
-              backgroundColor: theme.colors.card,
-              borderBottomColor: theme.colors.border
-            }
-          ]}>
-            {searching ? (
+      {/* Resultados da pesquisa */}
+      {showResults && (
+        <View style={[
+          styles.searchResultsContainer, 
+          { 
+            backgroundColor: theme.colors.card,
+            borderBottomColor: theme.colors.border
+          }
+        ]}>
+          {searching ? (
+            <View style={styles.searchingContainer}>
               <ActivityIndicator size="small" color={theme.colors.primary} />
-            ) : searchResults.length > 0 ? (
-              <FlatList
-                data={searchResults}
-                renderItem={renderSearchResult}
-                keyExtractor={(item) => item.id.toString()}
-                style={styles.searchResultsList}
-              />
-            ) : (
-              <Text style={[styles.noResultsText, { color: theme.colors.secondaryText }]}>Nenhum filme encontrado</Text>
-            )}
-          </View>
-        )}
+              <Text style={[styles.searchingText, { color: theme.colors.secondaryText }]}>
+                Pesquisando...
+              </Text>
+            </View>
+          ) : searchResults.length > 0 ? (
+            <FlatList
+              data={searchResults}
+              renderItem={renderSearchResult}
+              keyExtractor={(item) => item.id.toString()}
+              style={styles.searchResultsList}
+              showsVerticalScrollIndicator={false}
+            />
+          ) : (
+            <Text style={[styles.noResultsText, { color: theme.colors.secondaryText }]}>
+              Nenhum filme encontrado
+            </Text>
+          )}
+        </View>
+      )}
 
-        {/* Conteúdo principal */}
-        {!showResults && (
-          loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>Carregando dados do filme...</Text>
-            </View>
-          ) : error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : movie ? (
-            <ScrollView>
-              <View style={[styles.movieCard, { backgroundColor: theme.colors.card }]}>
-                <View style={styles.posterContainer}>
-                  {movie.poster_path ? (
-                    <Image
-                      source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }}
-                      style={styles.movieImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={[styles.movieImage, styles.noImageContainer]}>
-                      <Text style={styles.noImageText}>Sem imagem disponível</Text>
-                    </View>
-                  )}
+      {/* Conteúdo principal */}
+      {!showResults && (
+        loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>
+              Carregando dados do filme...
+            </Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity 
+              style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
+              onPress={refetch}
+            >
+              <Text style={styles.retryButtonText}>Tentar novamente</Text>
+            </TouchableOpacity>
+          </View>
+        ) : movie ? (
+          <ScrollView style={styles.scrollView}>
+            <View style={[styles.movieCard, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.posterContainer}>
+                {movie.poster_path ? (
+                  <Image
+                    source={{ uri: tmdbApi.getImageUrl(movie.poster_path, 'w500') }}
+                    style={styles.movieImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.movieImage, styles.noImageContainer]}>
+                    <Text style={styles.noImageText}>Sem imagem disponível</Text>
+                  </View>
+                )}
+                
+                {/* Botão de favorito */}
+                {user && (
                   <TouchableOpacity 
                     style={[styles.favoriteButton, isTogglingFavorite && styles.favoriteButtonDisabled]}
                     onPress={handleToggleFavorite}
@@ -297,84 +281,91 @@ export default function MovieScreen({ route, navigation }) {
                       <ActivityIndicator size="small" color="white" />
                     ) : (
                       <Ionicons 
-                        name={movie && isFavorite(movie.id) ? "heart" : "heart-outline"} 
+                        name={isFavorite(movie.id) ? "heart" : "heart-outline"} 
                         size={28} 
-                        color={movie && isFavorite(movie.id) ? "#F44336" : "white"} 
+                        color={isFavorite(movie.id) ? "#F44336" : "white"} 
                       />
                     )}
                   </TouchableOpacity>
-                </View>
-                
-                <View style={styles.movieDetails}>
-                  <Text style={[styles.movieTitle, { color: theme.colors.text }]}>{movie.title}</Text>
-                  <Text style={[styles.movieSynopsis, { color: theme.colors.text }]}>{movie.overview || 'Sinopse não disponível.'}</Text>
-                  
-                  <View style={[styles.movieStats, { 
-                    backgroundColor: isDark ? '#2A2A2A' : '#f9f9f9' 
-                  }]}>
-                    <Text style={[styles.movieStat, { color: theme.colors.text }]}>
-                      Orçamento: {movie.budget ? formatCurrency(movie.budget) : 'Não informado'}
-                    </Text>
-                    <Text style={[styles.movieStat, { color: theme.colors.text }]}>
-                      Voto: {movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}
-                    </Text>
-                    <Text style={[styles.movieStat, { color: theme.colors.text }]}>
-                      Duração: {movie.runtime ? `${movie.runtime} min` : 'Não informado'}
-                    </Text>
-                    <Text style={[styles.movieStat, { color: theme.colors.text }]}>
-                      Lançamento: {formatDate(movie.release_date)}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              
-              <View style={styles.actorsSection}>
-                <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Atores</Text>
-                
-                {cast.length > 0 ? (
-                  cast.map((person, index) => (
-                    <TouchableOpacity 
-                      key={index} 
-                      style={[styles.actorCard, { backgroundColor: theme.colors.card }]}
-                      onPress={() => navigation.navigate('ActorProfile', { actorId: person.id })}
-                    >
-                      <View style={styles.actorCardContent}>
-                        {person.profile_path ? (
-                          <Image 
-                            source={{ uri: `https://image.tmdb.org/t/p/w200${person.profile_path}` }} 
-                            style={styles.actorImage} 
-                          />
-                        ) : (
-                          <View style={styles.placeholderImage}>
-                            <Text style={styles.placeholderText}>{person.name.substring(0, 1)}</Text>
-                          </View>
-                        )}
-                        <View style={styles.actorInfo}>
-                          <Text style={[styles.characterName, { color: theme.colors.text }]}>
-                            {person.character || 'Papel não informado'}
-                          </Text>
-                          <Text style={[styles.actorName, { color: theme.colors.secondaryText }]}>
-                            {person.name}
-                          </Text>
-                        </View>
-                        <Text style={[styles.chevron, { color: theme.colors.secondaryText }]}>›</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  <Text style={[styles.noDataText, { color: theme.colors.secondaryText }]}>
-                    Nenhuma informação de elenco disponível
-                  </Text>
                 )}
               </View>
-            </ScrollView>
-          ) : (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>Nenhum filme encontrado</Text>
+              
+              <View style={styles.movieDetails}>
+                <Text style={[styles.movieTitle, { color: theme.colors.text }]}>
+                  {movie.title}
+                </Text>
+                <Text style={[styles.movieSynopsis, { color: theme.colors.text }]}>
+                  {movie.overview || 'Sinopse não disponível.'}
+                </Text>
+                
+                <View style={[styles.movieStats, { 
+                  backgroundColor: isDark ? '#2A2A2A' : '#f9f9f9' 
+                }]}>
+                  <Text style={[styles.movieStat, { color: theme.colors.text }]}>
+                    Orçamento: {movie.budget ? formatCurrency(movie.budget) : 'Não informado'}
+                  </Text>
+                  <Text style={[styles.movieStat, { color: theme.colors.text }]}>
+                    Avaliação: {movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}
+                  </Text>
+                  <Text style={[styles.movieStat, { color: theme.colors.text }]}>
+                    Duração: {movie.runtime ? `${movie.runtime} min` : 'Não informado'}
+                  </Text>
+                  <Text style={[styles.movieStat, { color: theme.colors.text }]}>
+                    Lançamento: {formatDate(movie.release_date)}
+                  </Text>
+                </View>
+              </View>
             </View>
-          )
-        )}
-      
+            
+            {/* Seção de atores */}
+            <View style={styles.actorsSection}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Elenco</Text>
+              
+              {cast.length > 0 ? (
+                cast.map((person, index) => (
+                  <TouchableOpacity 
+                    key={index} 
+                    style={[styles.actorCard, { backgroundColor: theme.colors.card }]}
+                    onPress={() => navigation.navigate('ActorProfile', { actorId: person.id })}
+                  >
+                    <View style={styles.actorCardContent}>
+                      {person.profile_path ? (
+                        <Image 
+                          source={{ uri: tmdbApi.getImageUrl(person.profile_path, 'w200') }} 
+                          style={styles.actorImage} 
+                        />
+                      ) : (
+                        <View style={styles.placeholderImage}>
+                          <Text style={styles.placeholderText}>
+                            {person.name.substring(0, 1)}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.actorInfo}>
+                        <Text style={[styles.characterName, { color: theme.colors.text }]}>
+                          {person.character || 'Papel não informado'}
+                        </Text>
+                        <Text style={[styles.actorName, { color: theme.colors.secondaryText }]}>
+                          {person.name}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={theme.colors.secondaryText} />
+                    </View>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={[styles.noDataText, { color: theme.colors.secondaryText }]}>
+                  Nenhuma informação de elenco disponível
+                </Text>
+              )}
+            </View>
+          </ScrollView>
+        ) : (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Nenhum filme encontrado</Text>
+          </View>
+        )
+      )}
     </SafeAreaView>
   );
 }
@@ -387,12 +378,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-  },
-  backButton: {
-    fontSize: 24,
-    marginRight: 16,
   },
   headerTitle: {
     fontSize: 18,
@@ -400,33 +388,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Ramabhadra_400Regular',
   },
   searchContainer: {
-    flexDirection: 'row',
     padding: 12,
     borderBottomWidth: 1,
     zIndex: 2,
   },
-  searchInput: {
-    flex: 1,
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     height: 40,
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
+  },
+  searchIcon: {
     marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 16,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
-  searchButton: {
-    backgroundColor: '#1E88E5',
-    padding: 10,
-    borderRadius: 8,
-    justifyContent: 'center',
-  },
-  searchButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontFamily: 'EncodeSansExpanded_500Medium',
-  },
-  searchButtonDisabled: {
-    opacity: 0.5,
+  clearButton: {
+    padding: 4,
   },
   // Estilos para resultados da pesquisa
   searchResultsContainer: {
@@ -491,12 +475,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
+  searchingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  searchingText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontFamily: 'EncodeSansExpanded_400Regular',
+  },
   noResultsText: {
     padding: 16,
     textAlign: 'center',
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
-  // Outros estilos
+  // Estados de loading e erro
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -517,8 +512,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'red',
     textAlign: 'center',
+    marginBottom: 16,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
+  retryButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontFamily: 'EncodeSansExpanded_500Medium',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  // Card do filme
   movieCard: {
     margin: 10,
     borderRadius: 10,
@@ -579,6 +589,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
+  // Seção de atores
   actorsSection: {
     padding: 16,
   },
@@ -629,11 +640,6 @@ const styles = StyleSheet.create({
   actorName: {
     fontSize: 14,
     fontFamily: 'EncodeSansExpanded_400Regular',
-  },
-  chevron: {
-    fontSize: 30,
-    position: 'absolute',
-    right: 15,
   },
   noDataText: {
     fontSize: 16,

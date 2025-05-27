@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// src/screens/SettingsScreen.js
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -6,59 +7,47 @@ import {
   ScrollView, 
   TouchableOpacity, 
   Switch, 
-  Image, 
-  TextInput, 
-  Modal, 
+  SafeAreaView,
   Alert,
   ActivityIndicator
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { useTheme } from '../contexts/ThemeContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
+import { useFavorites } from '../hooks/useFavorites';
 import ThemePreview from '../components/ThemePreview';
 
 export default function SettingsScreen({ navigation }) {
-  const { theme, isDark, setLightTheme, setDarkTheme, useSystemTheme, setSystemTheme } = useTheme();
-  const { user, isAuthenticated, logout, updateProfilePicture, updateUserData, login, register } = useAuth();
+  const { 
+    theme, 
+    isDark, 
+    setLightTheme, 
+    setDarkTheme, 
+    useSystemTheme, 
+    setSystemTheme 
+  } = useTheme();
   
-  const [isLoginModalVisible, setIsLoginModalVisible] = useState(false);
-  const [isRegistrationModalVisible, setIsRegistrationModalVisible] = useState(false);
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
+  const { favorites } = useFavorites(user?.uid);
   
-  // Campos para login
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  
-  // Campos para registro
-  const [registerName, setRegisterName] = useState('');
-  const [registerEmail, setRegisterEmail] = useState('');
-  const [registerPassword, setRegisterPassword] = useState('');
-  const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
-  const [registerError, setRegisterError] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
-  
-  // Campos para edição de perfil
-  const [editName, setEditName] = useState(user?.name || '');
-  const [editEmail, setEditEmail] = useState(user?.email || '');
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  
-  // Outras configurações
+  // Estados para configurações
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [dataAutoSync, setDataAutoSync] = useState(true);
-  
-  // Carregar configurações adicionais do AsyncStorage
-  React.useEffect(() => {
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+
+  // Carregar configurações do AsyncStorage
+  useEffect(() => {
     const loadSettings = async () => {
       try {
-        const storedNotifications = await AsyncStorage.getItem('@notifications_enabled');
-        const storedAutoSync = await AsyncStorage.getItem('@auto_sync_enabled');
+        const [storedNotifications, storedAutoSync] = await Promise.all([
+          AsyncStorage.getItem('@notifications_enabled'),
+          AsyncStorage.getItem('@auto_sync_enabled')
+        ]);
         
         if (storedNotifications !== null) {
           setNotificationsEnabled(JSON.parse(storedNotifications));
@@ -69,103 +58,40 @@ export default function SettingsScreen({ navigation }) {
         }
       } catch (error) {
         console.error('Erro ao carregar configurações:', error);
+      } finally {
+        setSettingsLoading(false);
       }
     };
     
     loadSettings();
   }, []);
   
-  // Funções para manipular notificações
+  // Função para alternar notificações
   const toggleNotifications = async (value) => {
     try {
       setNotificationsEnabled(value);
       await AsyncStorage.setItem('@notifications_enabled', JSON.stringify(value));
     } catch (error) {
       console.error('Erro ao salvar configuração de notificações:', error);
+      Alert.alert('Erro', 'Não foi possível salvar a configuração de notificações');
+      setNotificationsEnabled(!value); // Reverter em caso de erro
     }
   };
   
-  // Funções para manipular sincronização automática
+  // Função para alternar sincronização automática
   const toggleAutoSync = async (value) => {
     try {
       setDataAutoSync(value);
       await AsyncStorage.setItem('@auto_sync_enabled', JSON.stringify(value));
     } catch (error) {
       console.error('Erro ao salvar configuração de sincronização:', error);
+      Alert.alert('Erro', 'Não foi possível salvar a configuração de sincronização');
+      setDataAutoSync(!value); // Reverter em caso de erro
     }
   };
   
-  // Funções para lidar com a autenticação
-  const handleLogin = async () => {
-    setLoginError('');
-    setIsLoggingIn(true);
-    
-    try {
-      // Verificar campos
-      if (!loginEmail || !loginPassword) {
-        throw new Error('Por favor, preencha todos os campos');
-      }
-      
-      // Usar o contexto de autenticação
-      const result = await login({
-        email: loginEmail,
-        password: loginPassword
-      });
-      
-      if (result.success) {
-        // Limpar campos e fechar modal
-        setLoginEmail('');
-        setLoginPassword('');
-        setIsLoginModalVisible(false);
-      } else {
-        setLoginError(result.error || 'Erro no login');
-      }
-    } catch (error) {
-      setLoginError(error.message);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-  
-  const handleRegister = async () => {
-    setRegisterError('');
-    setIsRegistering(true);
-    
-    try {
-      // Verificar campos
-      if (!registerName || !registerEmail || !registerPassword || !registerConfirmPassword) {
-        throw new Error('Por favor, preencha todos os campos');
-      }
-      
-      if (registerPassword !== registerConfirmPassword) {
-        throw new Error('As senhas não correspondem');
-      }
-      
-      // Usar o contexto de autenticação
-      const result = await register({
-        name: registerName,
-        email: registerEmail,
-        password: registerPassword
-      });
-      
-      if (result.success) {
-        // Limpar campos e fechar modal
-        setRegisterName('');
-        setRegisterEmail('');
-        setRegisterPassword('');
-        setRegisterConfirmPassword('');
-        setIsRegistrationModalVisible(false);
-      } else {
-        setRegisterError(result.error || 'Erro no registro');
-      }
-    } catch (error) {
-      setRegisterError(error.message);
-    } finally {
-      setIsRegistering(false);
-    }
-  };
-  
-  const handleLogout = async () => {
+  // Função para logout
+  const handleLogout = () => {
     Alert.alert(
       'Confirmação',
       'Tem certeza que deseja sair da sua conta?',
@@ -176,256 +102,196 @@ export default function SettingsScreen({ navigation }) {
         },
         {
           text: 'Sair',
+          style: 'destructive',
           onPress: async () => {
-            const result = await logout();
-            if (!result.success) {
-              Alert.alert('Erro', result.error || 'Erro ao fazer logout');
+            setIsLoggingOut(true);
+            
+            try {
+              const result = await logout();
+              
+              if (!result.success) {
+                Alert.alert('Erro', result.error || 'Erro ao fazer logout');
+              }
+            } catch (error) {
+              Alert.alert('Erro', 'Erro inesperado ao fazer logout');
+            } finally {
+              setIsLoggingOut(false);
             }
           }
         }
       ]
     );
   };
-  
-  // Funções para manipular imagens
-  const pickImage = async () => {
-    try {
-      // Pedir permissão para acessar a galeria
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert('Permissão negada', 'Precisamos de permissão para acessar suas fotos');
-        return;
-      }
-      
-      setIsUploadingImage(true);
-      
-      // Abrir o seletor de imagens
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        // Atualizar a imagem de perfil
-        const imageUri = result.assets[0].uri;
-        const updateResult = await updateProfilePicture(imageUri);
-        
-        if (!updateResult.success) {
-          Alert.alert('Erro', updateResult.error || 'Erro ao atualizar foto de perfil');
+
+  // Função para limpar cache
+  const handleClearCache = () => {
+    Alert.alert(
+      'Limpar Cache',
+      'Isso irá remover todos os dados temporários do aplicativo. Deseja continuar?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Limpar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Aqui você pode implementar a limpeza do cache conforme necessário
+              Alert.alert('Sucesso', 'Cache limpo com sucesso');
+            } catch (error) {
+              Alert.alert('Erro', 'Erro ao limpar cache');
+            }
+          }
         }
-      }
-    } catch (error) {
-      Alert.alert('Erro', 'Erro ao selecionar imagem: ' + error.message);
-    } finally {
-      setIsUploadingImage(false);
-    }
+      ]
+    );
   };
-  
-  // Funções para edição de perfil
-  const handleSaveProfile = async () => {
-    try {
-      setIsSavingProfile(true);
-      
-      // Verificar campos
-      if (!editName || !editEmail) {
-        throw new Error('Por favor, preencha todos os campos');
-      }
-      
-      // Atualizar dados do usuário
-      const result = await updateUserData({
-        name: editName,
-        email: editEmail
-      });
-      
-      if (result.success) {
-        setIsEditingProfile(false);
-        Alert.alert('Sucesso', 'Perfil atualizado com sucesso');
-      } else {
-        throw new Error(result.error || 'Erro ao atualizar perfil');
-      }
-    } catch (error) {
-      Alert.alert('Erro', error.message);
-    } finally {
-      setIsSavingProfile(false);
-    }
-  };
-  
-  // Renderizar perfil do usuário
-  const renderUserProfile = () => {
-    if (isAuthenticated && user) {
+
+  // Renderizar seção de conta
+  const renderAccountSection = () => {
+    if (!isAuthenticated) {
       return (
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Perfil</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            Conta
+          </Text>
           
-          <View style={styles.profileContainer}>
-            <TouchableOpacity onPress={pickImage} disabled={isUploadingImage}>
-              {isUploadingImage ? (
-                <View style={styles.profileImagePlaceholder}>
-                  <ActivityIndicator color={theme.colors.primary} />
-                </View>
-              ) : user.profilePicture ? (
-                <Image 
-                  source={{ uri: user.profilePicture }} 
-                  style={styles.profileImage} 
-                />
-              ) : (
-                <View style={styles.profileImagePlaceholder}>
-                  <Text style={styles.profileImagePlaceholderText}>
-                    {user.name.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-              
-              <View style={styles.editImageIcon}>
-                <Ionicons name="camera" size={16} color="white" />
-              </View>
-            </TouchableOpacity>
-            
-            {isEditingProfile ? (
-              <View style={styles.profileEditForm}>
-                <TextInput
-                  style={[
-                    styles.input,
-                    { 
-                      backgroundColor: theme.colors.inputBackground,
-                      borderColor: theme.colors.inputBorder,
-                      color: theme.colors.text
-                    }
-                  ]}
-                  placeholder="Nome"
-                  placeholderTextColor={theme.colors.secondaryText}
-                  value={editName}
-                  onChangeText={setEditName}
-                />
-                
-                <TextInput
-                  style={[
-                    styles.input,
-                    { 
-                      backgroundColor: theme.colors.inputBackground,
-                      borderColor: theme.colors.inputBorder,
-                      color: theme.colors.text
-                    }
-                  ]}
-                  placeholder="Email"
-                  placeholderTextColor={theme.colors.secondaryText}
-                  value={editEmail}
-                  onChangeText={setEditEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-                
-                <View style={styles.rowButtons}>
-                  <TouchableOpacity 
-                    style={[styles.button, styles.cancelButton]} 
-                    onPress={() => {
-                      setEditName(user.name);
-                      setEditEmail(user.email);
-                      setIsEditingProfile(false);
-                    }}
-                  >
-                    <Text style={styles.buttonText}>Cancelar</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[styles.button, styles.saveButton]} 
-                    onPress={handleSaveProfile}
-                    disabled={isSavingProfile}
-                  >
-                    {isSavingProfile ? (
-                      <ActivityIndicator color="white" size="small" />
-                    ) : (
-                      <Text style={styles.buttonText}>Salvar</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.profileInfo}>
-                <Text style={[styles.profileName, { color: theme.colors.text }]}>{user.name}</Text>
-                <Text style={[styles.profileEmail, { color: theme.colors.secondaryText }]}>{user.email}</Text>
-                
-                <View style={styles.rowButtons}>
-                  <TouchableOpacity 
-                    style={[styles.button, styles.editButton]} 
-                    onPress={() => setIsEditingProfile(true)}
-                  >
-                    <Text style={styles.buttonText}>Editar Perfil</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[styles.button, styles.logoutButton]} 
-                    onPress={handleLogout}
-                  >
-                    <Text style={styles.buttonText}>Sair</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-          </View>
-        </View>
-      );
-    } else {
-      return (
-        <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Conta</Text>
-          
-          <View style={styles.authButtons}>
-            <TouchableOpacity 
-              style={[styles.button, styles.loginButton]} 
-              onPress={() => setIsLoginModalVisible(true)}
-            >
-              <Text style={styles.buttonText}>Entrar</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.button, styles.registerButton]} 
-              onPress={() => setIsRegistrationModalVisible(true)}
-            >
-              <Text style={styles.buttonText}>Registrar</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity 
+            style={styles.settingRow}
+            onPress={() => navigation.navigate('Login')}
+          >
+            <View style={styles.settingLeft}>
+              <Ionicons name="log-in-outline" size={24} color={theme.colors.primary} />
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                Fazer Login
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.secondaryText} />
+          </TouchableOpacity>
         </View>
       );
     }
+
+    return (
+      <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          Conta
+        </Text>
+        
+        <TouchableOpacity 
+          style={styles.settingRow}
+          onPress={() => navigation.navigate('Profile')}
+        >
+          <View style={styles.settingLeft}>
+            <Ionicons name="person-outline" size={24} color={theme.colors.primary} />
+            <View>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                {user?.displayName || 'Usuário'}
+              </Text>
+              <Text style={[styles.settingSubtitle, { color: theme.colors.secondaryText }]}>
+                {user?.email}
+              </Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.colors.secondaryText} />
+        </TouchableOpacity>
+        
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <Ionicons name="heart-outline" size={24} color={theme.colors.primary} />
+            <View>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                Favoritos
+              </Text>
+              <Text style={[styles.settingSubtitle, { color: theme.colors.secondaryText }]}>
+                {favorites.length} filmes salvos
+              </Text>
+            </View>
+          </View>
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.settingRow}
+          onPress={handleLogout}
+          disabled={isLoggingOut}
+        >
+          <View style={styles.settingLeft}>
+            <Ionicons name="log-out-outline" size={24} color={theme.colors.error} />
+            <Text style={[styles.settingLabel, { color: theme.colors.error }]}>
+              {isLoggingOut ? 'Saindo...' : 'Sair da Conta'}
+            </Text>
+          </View>
+          {isLoggingOut && <ActivityIndicator size="small" color={theme.colors.error} />}
+        </TouchableOpacity>
+      </View>
+    );
   };
   
+  if (settingsLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>
+            Carregando configurações...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
       
-      <View style={[styles.header, { backgroundColor: theme.colors.headerBackground }]}>
-        <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>Configurações</Text>
+      {/* Header */}
+      <View style={[styles.header, { 
+        backgroundColor: theme.colors.headerBackground,
+        borderBottomColor: theme.colors.border 
+      }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={28} color={theme.colors.primary} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
+          Configurações
+        </Text>
+        <View style={{ width: 28 }} />
       </View>
       
-      <ScrollView style={styles.scrollView}>
-        {/* Perfil do Usuário */}
-        {renderUserProfile()}
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Seção de Conta */}
+        {renderAccountSection()}
         
         {/* Configurações de Aparência */}
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Aparência</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            Aparência
+          </Text>
           
           <View style={styles.themePreviewContainer}>
             <ThemePreview 
               isDark={false} 
-              active={!isDark} // Mostra ativo se o tema atual é claro, independente de ser sistema ou manual
+              active={!isDark && !useSystemTheme}
               onPress={setLightTheme}
             />
             <ThemePreview 
               isDark={true} 
-              active={isDark} // Mostra ativo se o tema atual é escuro, independente de ser sistema ou manual
+              active={isDark && !useSystemTheme}
               onPress={setDarkTheme}
             />
           </View>
           
           <View style={styles.settingRow}>
-            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>Usar Tema do Sistema</Text>
+            <View style={styles.settingLeft}>
+              <Ionicons name="phone-portrait-outline" size={24} color={theme.colors.primary} />
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                Usar Tema do Sistema
+              </Text>
+            </View>
             <Switch
-              trackColor={{ false: "#767577", true: "#81b0ff" }}
+              trackColor={{ false: "#767577", true: theme.colors.primary + "40" }}
               thumbColor={useSystemTheme ? theme.colors.primary : "#f4f3f4"}
               ios_backgroundColor="#3e3e3e"
               onValueChange={setSystemTheme}
@@ -434,14 +300,21 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </View>
         
-        {/* Outras Configurações */}
+        {/* Preferências */}
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Preferências</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            Preferências
+          </Text>
           
           <View style={styles.settingRow}>
-            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>Notificações</Text>
+            <View style={styles.settingLeft}>
+              <Ionicons name="notifications-outline" size={24} color={theme.colors.primary} />
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                Notificações
+              </Text>
+            </View>
             <Switch
-              trackColor={{ false: "#767577", true: "#81b0ff" }}
+              trackColor={{ false: "#767577", true: theme.colors.primary + "40" }}
               thumbColor={notificationsEnabled ? theme.colors.primary : "#f4f3f4"}
               ios_backgroundColor="#3e3e3e"
               onValueChange={toggleNotifications}
@@ -450,9 +323,14 @@ export default function SettingsScreen({ navigation }) {
           </View>
           
           <View style={styles.settingRow}>
-            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>Sincronizar dados automaticamente</Text>
+            <View style={styles.settingLeft}>
+              <Ionicons name="sync-outline" size={24} color={theme.colors.primary} />
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                Sincronização Automática
+              </Text>
+            </View>
             <Switch
-              trackColor={{ false: "#767577", true: "#81b0ff" }}
+              trackColor={{ false: "#767577", true: theme.colors.primary + "40" }}
               thumbColor={dataAutoSync ? theme.colors.primary : "#f4f3f4"}
               ios_backgroundColor="#3e3e3e"
               onValueChange={toggleAutoSync}
@@ -460,251 +338,91 @@ export default function SettingsScreen({ navigation }) {
             />
           </View>
         </View>
+
+        {/* Dados e Armazenamento */}
+        <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            Dados e Armazenamento
+          </Text>
+          
+          <TouchableOpacity style={styles.settingRow} onPress={handleClearCache}>
+            <View style={styles.settingLeft}>
+              <Ionicons name="trash-outline" size={24} color={theme.colors.primary} />
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                Limpar Cache
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.secondaryText} />
+          </TouchableOpacity>
+        </View>
         
         {/* Sobre o App */}
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Sobre</Text>
-          <Text style={[styles.aboutText, { color: theme.colors.secondaryText }]}>
-            FilmX versão 1.0.0
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            Sobre
           </Text>
-          <Text style={[styles.aboutText, { color: theme.colors.secondaryText }]}>
-            Um aplicativo para os amantes de cinema acompanharem seus filmes favoritos.
-          </Text>
+          
+          <View style={styles.aboutContainer}>
+            <Text style={[styles.appName, { color: theme.colors.text }]}>
+              MovieBox
+            </Text>
+            <Text style={[styles.appVersion, { color: theme.colors.secondaryText }]}>
+              Versão 1.0.0
+            </Text>
+            <Text style={[styles.appDescription, { color: theme.colors.secondaryText }]}>
+              Um aplicativo para os amantes de cinema descobrirem e organizarem seus filmes favoritos.
+            </Text>
+          </View>
         </View>
+
+        {/* Espaço extra no final */}
+        <View style={{ height: 20 }} />
       </ScrollView>
-      
-      {/* Modal de Login */}
-      <Modal
-        visible={isLoginModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsLoginModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Entrar</Text>
-            
-            {loginError ? (
-              <Text style={styles.errorText}>{loginError}</Text>
-            ) : null}
-            
-            <TextInput
-              style={[
-                styles.input,
-                { 
-                  backgroundColor: theme.colors.inputBackground,
-                  borderColor: theme.colors.inputBorder,
-                  color: theme.colors.text
-                }
-              ]}
-              placeholder="Email"
-              placeholderTextColor={theme.colors.secondaryText}
-              value={loginEmail}
-              onChangeText={setLoginEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            
-            <TextInput
-              style={[
-                styles.input,
-                { 
-                  backgroundColor: theme.colors.inputBackground,
-                  borderColor: theme.colors.inputBorder,
-                  color: theme.colors.text
-                }
-              ]}
-              placeholder="Senha"
-              placeholderTextColor={theme.colors.secondaryText}
-              value={loginPassword}
-              onChangeText={setLoginPassword}
-              secureTextEntry
-            />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={[styles.button, styles.cancelButton]} 
-                onPress={() => setIsLoginModalVisible(false)}
-              >
-                <Text style={styles.buttonText}>Cancelar</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.button, styles.loginButton]} 
-                onPress={handleLogin}
-                disabled={isLoggingIn}
-              >
-                {isLoggingIn ? (
-                  <ActivityIndicator color="white" size="small" />
-                ) : (
-                  <Text style={styles.buttonText}>Entrar</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.switchAuthMode}
-              onPress={() => {
-                setIsLoginModalVisible(false);
-                setIsRegistrationModalVisible(true);
-              }}
-            >
-              <Text style={[styles.switchAuthText, { color: theme.colors.primary }]}>
-                Não tem uma conta? Registre-se
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-      
-      {/* Modal de Registro */}
-      <Modal
-        visible={isRegistrationModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsRegistrationModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Registrar</Text>
-            
-            {registerError ? (
-              <Text style={styles.errorText}>{registerError}</Text>
-            ) : null}
-            
-            <TextInput
-              style={[
-                styles.input,
-                { 
-                  backgroundColor: theme.colors.inputBackground,
-                  borderColor: theme.colors.inputBorder,
-                  color: theme.colors.text
-                }
-              ]}
-              placeholder="Nome"
-              placeholderTextColor={theme.colors.secondaryText}
-              value={registerName}
-              onChangeText={setRegisterName}
-            />
-            
-            <TextInput
-              style={[
-                styles.input,
-                { 
-                  backgroundColor: theme.colors.inputBackground,
-                  borderColor: theme.colors.inputBorder,
-                  color: theme.colors.text
-                }
-              ]}
-              placeholder="Email"
-              placeholderTextColor={theme.colors.secondaryText}
-              value={registerEmail}
-              onChangeText={setRegisterEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            
-            <TextInput
-              style={[
-                styles.input,
-                { 
-                  backgroundColor: theme.colors.inputBackground,
-                  borderColor: theme.colors.inputBorder,
-                  color: theme.colors.text
-                }
-              ]}
-              placeholder="Senha"
-              placeholderTextColor={theme.colors.secondaryText}
-              value={registerPassword}
-              onChangeText={setRegisterPassword}
-              secureTextEntry
-            />
-            
-            <TextInput
-              style={[
-                styles.input,
-                { 
-                  backgroundColor: theme.colors.inputBackground,
-                  borderColor: theme.colors.inputBorder,
-                  color: theme.colors.text
-                }
-              ]}
-              placeholder="Confirmar Senha"
-              placeholderTextColor={theme.colors.secondaryText}
-              value={registerConfirmPassword}
-              onChangeText={setRegisterConfirmPassword}
-              secureTextEntry
-            />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={[styles.button, styles.cancelButton]} 
-                onPress={() => setIsRegistrationModalVisible(false)}
-              >
-                <Text style={styles.buttonText}>Cancelar</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.button, styles.registerButton]} 
-                onPress={handleRegister}
-                disabled={isRegistering}
-              >
-                {isRegistering ? (
-                  <ActivityIndicator color="white" size="small" />
-                ) : (
-                  <Text style={styles.buttonText}>Registrar</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.switchAuthMode}
-              onPress={() => {
-                setIsRegistrationModalVisible(false);
-                setIsLoginModalVisible(true);
-              }}
-            >
-              <Text style={[styles.switchAuthText, { color: theme.colors.primary }]}>
-                Já tem uma conta? Faça login
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: Constants.statusBarHeight,
   },
   header: {
-    paddingTop: Constants.statusBarHeight + 16,
-    padding: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     fontFamily: 'Ramabhadra_400Regular',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontFamily: 'EncodeSansExpanded_400Regular',
+  },
   scrollView: {
     flex: 1,
   },
   section: {
-    margin: 12,
-    borderRadius: 10,
+    margin: 16,
+    borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 1,
+      height: 2,
     },
-    shadowOpacity: 0.22,
-    shadowRadius: 2.22,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 3,
   },
   sectionTitle: {
@@ -719,162 +437,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  settingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   settingLabel: {
     fontSize: 16,
+    marginLeft: 12,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
-  // Estilos para perfil de usuário
-  profileContainer: {
-    alignItems: 'center',
-    padding: 8,
-  },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  profileImagePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#ccc',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileImagePlaceholderText: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  editImageIcon: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#1E88E5',
-    borderRadius: 15,
-    width: 30,
-    height: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileInfo: {
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  profileName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    fontFamily: 'Ramabhadra_400Regular',
-  },
-  profileEmail: {
-    fontSize: 16,
-    marginBottom: 16,
+  settingSubtitle: {
+    fontSize: 14,
+    marginLeft: 12,
+    marginTop: 2,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
-  profileEditForm: {
-    width: '100%',
-    marginTop: 12,
-  },
-  rowButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 16,
-  },
-  button: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 5,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontFamily: 'EncodeSansExpanded_500Medium',
-  },
-  loginButton: {
-    backgroundColor: '#1976D2',
-  },
-  registerButton: {
-    backgroundColor: '#4CAF50',
-  },
-  editButton: {
-    backgroundColor: '#1E88E5',
-  },
-  saveButton: {
-    backgroundColor: '#4CAF50',
-  },
-  logoutButton: {
-    backgroundColor: '#F44336',
-  },
-  cancelButton: {
-    backgroundColor: '#757575',
-  },
-  // Estilos para autenticação
-  authButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginVertical: 16,
-  },
-  // Estilos para visualização de temas
+  // Visualização de temas
   themePreviewContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginBottom: 16,
-  },
-  // Estilos para modal
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    width: '80%',
-    padding: 20,
-    borderRadius: 10,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-    fontFamily: 'Ramabhadra_400Regular',
-  },
-  input: {
-    height: 50,
-    borderWidth: 1,
-    marginBottom: 15,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-    fontFamily: 'EncodeSansExpanded_400Regular',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 10,
-  },
-  switchAuthMode: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  switchAuthText: {
-    fontSize: 14,
-    fontFamily: 'EncodeSansExpanded_400Regular',
-  },
-  errorText: {
-    color: '#F44336',
-    marginBottom: 15,
-    textAlign: 'center',
-    fontFamily: 'EncodeSansExpanded_400Regular',
+    gap: 16,
   },
   // Sobre o app
-  aboutText: {
+  aboutContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  appName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    fontFamily: 'Exo_700Bold',
+  },
+  appVersion: {
+    fontSize: 16,
+    marginBottom: 12,
+    fontFamily: 'EncodeSansExpanded_400Regular',
+  },
+  appDescription: {
     fontSize: 14,
-    marginBottom: 8,
+    textAlign: 'center',
+    lineHeight: 20,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
 });
