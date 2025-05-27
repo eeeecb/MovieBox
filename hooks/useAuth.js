@@ -14,7 +14,10 @@ export const useAuth = () => {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL
+          photoURL: firebaseUser.photoURL,
+          metadata: firebaseUser.metadata,
+          // Incluir outros campos do Firestore se existirem
+          ...firebaseUser
         });
       } else {
         setUser(null);
@@ -107,6 +110,28 @@ export const useAuth = () => {
     }
   };
 
+  const updateProfilePicture = async (imageUri, fileInfo = {}) => {
+    if (!user) return { success: false, error: 'Usuário não autenticado' };
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const result = await firebaseAuthService.updateProfilePicture(user.uid, imageUri, fileInfo);
+      
+      if (!result.success) {
+        setError(result.error);
+      }
+      
+      return result;
+    } catch (err) {
+      setError(err.message);
+      return { success: false, error: err.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     user,
     loading,
@@ -115,6 +140,7 @@ export const useAuth = () => {
     register,
     login,
     logout,
-    updateProfile
+    updateProfile,
+    updateProfilePicture
   };
 };

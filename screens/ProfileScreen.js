@@ -1,5 +1,5 @@
 // src/screens/ProfileScreen.js
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -10,57 +10,57 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
-  Alert
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import Constants from 'expo-constants';
+  Alert,
+} from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import Constants from "expo-constants";
 
-import { useTheme } from '../contexts/ThemeContext';
-import { useAuth } from '../hooks/useAuth';
-import { useFavorites } from '../hooks/useFavorites';
+import { useTheme } from "../contexts/ThemeContext";
+import { useAuth } from "../hooks/useAuth";
+import { useFavorites } from "../hooks/useFavorites";
 
 export default function ProfileScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const { user, updateProfile, loading: authLoading } = useAuth();
+  const { user, updateProfile, updateProfilePicture, loading: authLoading } = useAuth();
   const { favorites, loading: favoritesLoading } = useFavorites(user?.uid);
-  
+
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(user?.displayName || '');
+  const [editName, setEditName] = useState(user?.displayName || "");
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const handleSaveProfile = async () => {
     if (!editName.trim()) {
-      Alert.alert('Erro', 'Por favor, insira um nome válido');
+      Alert.alert("Erro", "Por favor, insira um nome válido");
       return;
     }
 
     setIsUpdating(true);
-    
+
     try {
       const result = await updateProfile({ name: editName.trim() });
-      
+
       if (result.success) {
         setIsEditing(false);
-        Alert.alert('Sucesso', 'Perfil atualizado com sucesso');
+        Alert.alert("Sucesso", "Perfil atualizado com sucesso");
       } else {
-        Alert.alert('Erro', result.error || 'Erro ao atualizar perfil');
+        Alert.alert("Erro", result.error || "Erro ao atualizar perfil");
       }
     } catch (error) {
-      Alert.alert('Erro', error.message);
+      Alert.alert("Erro", error.message);
     } finally {
       setIsUpdating(false);
     }
   };
 
   const handleCancelEdit = () => {
-    setEditName(user?.displayName || '');
+    setEditName(user?.displayName || "");
     setIsEditing(false);
   };
 
-  const pickImage = async () => {
+const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
@@ -76,32 +76,113 @@ export default function ProfileScreen({ navigation }) {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        allowsMultipleSelection: false,
       });
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const imageUri = result.assets[0].uri;
+        const asset = result.assets[0];
+        const imageUri = asset.uri;
         
-        // Aqui você implementaria o upload da imagem para o Firebase Storage
-        // Por enquanto, apenas atualizamos localmente
-        const updateResult = await updateProfile({ photoURL: imageUri });
+        // Validações de segurança
+        const fileInfo = {
+          fileSize: asset.fileSize,
+          width: asset.width,
+          height: asset.height,
+          mimeType: asset.mimeType
+        };
         
-        if (!updateResult.success) {
+        // Fazer upload da imagem usando o serviço atualizado
+        const updateResult = await updateProfilePicture(imageUri, fileInfo);
+        
+        if (updateResult.success) {
+          Alert.alert('Sucesso', 'Foto de perfil atualizada com sucesso!');
+        } else {
           Alert.alert('Erro', updateResult.error || 'Erro ao atualizar foto');
         }
       }
     } catch (error) {
       Alert.alert('Erro', 'Erro ao selecionar imagem: ' + error.message);
+      console.error('Erro no pickImage:', error);
     } finally {
       setIsUploadingImage(false);
     }
   };
 
+  const takePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('Permissão negada', 'Precisamos de permissão para usar a câmera');
+        return;
+      }
+      
+      setIsUploadingImage(true);
+      
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const imageUri = asset.uri;
+        
+        const fileInfo = {
+          fileSize: asset.fileSize,
+          width: asset.width,
+          height: asset.height,
+          mimeType: asset.mimeType
+        };
+        
+        const updateResult = await updateProfilePicture(imageUri, fileInfo);
+        
+        if (updateResult.success) {
+          Alert.alert('Sucesso', 'Foto de perfil atualizada com sucesso!');
+        } else {
+          Alert.alert('Erro', updateResult.error || 'Erro ao atualizar foto');
+        }
+      }
+    } catch (error) {
+      Alert.alert('Erro', 'Erro ao tirar foto: ' + error.message);
+      console.error('Erro no takePhoto:', error);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const showImagePickerOptions = () => {
+    Alert.alert(
+      'Alterar Foto de Perfil',
+      'Escolha uma opção:',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Escolher da Galeria',
+          onPress: pickImage
+        },
+        {
+          text: 'Tirar Foto',
+          onPress: takePhoto
+        }
+      ]
+    );
+  };
+
   if (authLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+      >
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>
+          <Text
+            style={[styles.loadingText, { color: theme.colors.secondaryText }]}
+          >
             Carregando perfil...
           </Text>
         </View>
@@ -110,35 +191,44 @@ export default function ProfileScreen({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       <StatusBar style={isDark ? "light" : "dark"} />
-      
+
       {/* Header */}
-      <View style={[styles.header, { 
-        backgroundColor: theme.colors.headerBackground,
-        borderBottomColor: theme.colors.border 
-      }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: theme.colors.headerBackground,
+            borderBottomColor: theme.colors.border,
+          },
+        ]}
+      >
         <TouchableOpacity onPress={() => navigation.openDrawer()}>
           <Ionicons name="menu" size={24} color={theme.colors.primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
           Perfil
         </Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => setIsEditing(!isEditing)}
           disabled={isEditing && isUpdating}
         >
-          <Ionicons 
-            name={isEditing ? "close-outline" : "create-outline"} 
-            size={24} 
-            color={theme.colors.primary} 
+          <Ionicons
+            name={isEditing ? "close-outline" : "create-outline"}
+            size={24}
+            color={theme.colors.primary}
           />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView}>
         {/* Profile Info Card */}
-        <View style={[styles.profileCard, { backgroundColor: theme.colors.card }]}>
+        <View
+          style={[styles.profileCard, { backgroundColor: theme.colors.card }]}
+        >
           {/* Avatar Section */}
           <View style={styles.avatarSection}>
             <TouchableOpacity onPress={pickImage} disabled={isUploadingImage}>
@@ -149,13 +239,20 @@ export default function ProfileScreen({ navigation }) {
               ) : user?.photoURL ? (
                 <Image source={{ uri: user.photoURL }} style={styles.avatar} />
               ) : (
-                <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
+                <View
+                  style={[
+                    styles.avatarPlaceholder,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                >
                   <Text style={styles.avatarText}>
-                    {user?.displayName?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
+                    {user?.displayName?.charAt(0)?.toUpperCase() ||
+                      user?.email?.charAt(0)?.toUpperCase() ||
+                      "U"}
                   </Text>
                 </View>
               )}
-              
+
               <View style={styles.cameraIcon}>
                 <Ionicons name="camera" size={16} color="white" />
               </View>
@@ -172,25 +269,28 @@ export default function ProfileScreen({ navigation }) {
                     {
                       backgroundColor: theme.colors.inputBackground,
                       borderColor: theme.colors.inputBorder,
-                      color: theme.colors.text
-                    }
+                      color: theme.colors.text,
+                    },
                   ]}
                   placeholder="Nome"
                   placeholderTextColor={theme.colors.secondaryText}
                   value={editName}
                   onChangeText={setEditName}
                 />
-                
+
                 <View style={styles.editButtons}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.button, styles.cancelButton]}
                     onPress={handleCancelEdit}
                   >
                     <Text style={styles.buttonText}>Cancelar</Text>
                   </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[styles.button, { backgroundColor: theme.colors.primary }]}
+
+                  <TouchableOpacity
+                    style={[
+                      styles.button,
+                      { backgroundColor: theme.colors.primary },
+                    ]}
                     onPress={handleSaveProfile}
                     disabled={isUpdating}
                   >
@@ -205,9 +305,14 @@ export default function ProfileScreen({ navigation }) {
             ) : (
               <View style={styles.userInfo}>
                 <Text style={[styles.userName, { color: theme.colors.text }]}>
-                  {user?.displayName || 'Nome não informado'}
+                  {user?.displayName || "Nome não informado"}
                 </Text>
-                <Text style={[styles.userEmail, { color: theme.colors.secondaryText }]}>
+                <Text
+                  style={[
+                    styles.userEmail,
+                    { color: theme.colors.secondaryText },
+                  ]}
+                >
                   {user?.email}
                 </Text>
               </View>
@@ -217,56 +322,81 @@ export default function ProfileScreen({ navigation }) {
 
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
-          <View style={[styles.statCard, { backgroundColor: theme.colors.card }]}>
+          <View
+            style={[styles.statCard, { backgroundColor: theme.colors.card }]}
+          >
             <Ionicons name="heart" size={24} color="#F44336" />
             <Text style={[styles.statNumber, { color: theme.colors.text }]}>
-              {favoritesLoading ? '...' : favorites.length}
+              {favoritesLoading ? "..." : favorites.length}
             </Text>
-            <Text style={[styles.statLabel, { color: theme.colors.secondaryText }]}>
+            <Text
+              style={[styles.statLabel, { color: theme.colors.secondaryText }]}
+            >
               Favoritos
             </Text>
           </View>
-          
-          <View style={[styles.statCard, { backgroundColor: theme.colors.card }]}>
+
+          <View
+            style={[styles.statCard, { backgroundColor: theme.colors.card }]}
+          >
             <Ionicons name="calendar" size={24} color={theme.colors.primary} />
             <Text style={[styles.statNumber, { color: theme.colors.text }]}>
-              {user?.metadata?.creationTime ? 
-                new Date(user.metadata.creationTime).getFullYear() : 
-                new Date().getFullYear()
-              }
+              {user?.metadata?.creationTime
+                ? new Date(user.metadata.creationTime).getFullYear()
+                : new Date().getFullYear()}
             </Text>
-            <Text style={[styles.statLabel, { color: theme.colors.secondaryText }]}>
+            <Text
+              style={[styles.statLabel, { color: theme.colors.secondaryText }]}
+            >
               Membro desde
             </Text>
           </View>
         </View>
 
         {/* Quick Actions */}
-        <View style={[styles.actionsCard, { backgroundColor: theme.colors.card }]}>
+        <View
+          style={[styles.actionsCard, { backgroundColor: theme.colors.card }]}
+        >
           <Text style={[styles.actionsTitle, { color: theme.colors.text }]}>
             Ações Rápidas
           </Text>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => navigation.navigate('Main', { screen: 'Favorites' })}
+            onPress={() => navigation.navigate("Main", { screen: "Favorites" })}
           >
-            <Ionicons name="heart-outline" size={24} color={theme.colors.primary} />
+            <Ionicons
+              name="heart-outline"
+              size={24}
+              color={theme.colors.primary}
+            />
             <Text style={[styles.actionText, { color: theme.colors.text }]}>
               Ver Favoritos
             </Text>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.secondaryText} />
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={theme.colors.secondaryText}
+            />
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionItem}
-            onPress={() => navigation.navigate('Settings')}
+            onPress={() => navigation.navigate("Settings")}
           >
-            <Ionicons name="settings-outline" size={24} color={theme.colors.primary} />
+            <Ionicons
+              name="settings-outline"
+              size={24}
+              color={theme.colors.primary}
+            />
             <Text style={[styles.actionText, { color: theme.colors.text }]}>
               Configurações
             </Text>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.secondaryText} />
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={theme.colors.secondaryText}
+            />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -280,26 +410,26 @@ const styles = StyleSheet.create({
     paddingTop: Constants.statusBarHeight,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: 16,
     borderBottomWidth: 1,
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    fontFamily: 'Nunito_400Regular',
+    fontWeight: "bold",
+    fontFamily: "Nunito_400Regular",
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    fontFamily: 'EncodeSansExpanded_400Regular',
+    fontFamily: "EncodeSansExpanded_400Regular",
   },
   scrollView: {
     flex: 1,
@@ -309,22 +439,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   avatarSection: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
   avatarContainer: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   avatar: {
     width: 100,
@@ -335,58 +465,58 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   avatarText: {
     fontSize: 36,
-    fontWeight: 'bold',
-    color: 'white',
+    fontWeight: "bold",
+    color: "white",
   },
   cameraIcon: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     right: 0,
-    backgroundColor: '#1E88E5',
+    backgroundColor: "#1E88E5",
     borderRadius: 15,
     width: 30,
     height: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   userInfoSection: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   userInfo: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   userName: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 4,
-    fontFamily: 'Nunito_400Regular',
+    fontFamily: "Nunito_400Regular",
   },
   userEmail: {
     fontSize: 16,
-    fontFamily: 'EncodeSansExpanded_400Regular',
+    fontFamily: "EncodeSansExpanded_400Regular",
   },
   editForm: {
-    width: '100%',
-    alignItems: 'center',
+    width: "100%",
+    alignItems: "center",
   },
   editInput: {
-    width: '100%',
+    width: "100%",
     height: 50,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 16,
     marginBottom: 16,
     fontSize: 16,
-    textAlign: 'center',
-    fontFamily: 'EncodeSansExpanded_400Regular',
+    textAlign: "center",
+    fontFamily: "EncodeSansExpanded_400Regular",
   },
   editButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   button: {
@@ -394,18 +524,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
     minWidth: 100,
-    alignItems: 'center',
+    alignItems: "center",
   },
   cancelButton: {
-    backgroundColor: '#757575',
+    backgroundColor: "#757575",
   },
   buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontFamily: 'EncodeSansExpanded_500Medium',
+    color: "white",
+    fontWeight: "bold",
+    fontFamily: "EncodeSansExpanded_500Medium",
   },
   statsContainer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
     marginBottom: 16,
   },
@@ -413,8 +543,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 12,
     padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -422,19 +552,19 @@ const styles = StyleSheet.create({
   },
   statNumber: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginTop: 8,
     marginBottom: 4,
-    fontFamily: 'Nunito_400Regular',
+    fontFamily: "Nunito_400Regular",
   },
   statLabel: {
     fontSize: 14,
-    fontFamily: 'EncodeSansExpanded_400Regular',
+    fontFamily: "EncodeSansExpanded_400Regular",
   },
   actionsCard: {
     borderRadius: 12,
     padding: 20,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -442,21 +572,21 @@ const styles = StyleSheet.create({
   },
   actionsTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 16,
-    fontFamily: 'Nunito_400Regular',
+    fontFamily: "Nunito_400Regular",
   },
   actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: "#E0E0E0",
   },
   actionText: {
     flex: 1,
     fontSize: 16,
     marginLeft: 12,
-    fontFamily: 'EncodeSansExpanded_400Regular',
+    fontFamily: "EncodeSansExpanded_400Regular",
   },
 });

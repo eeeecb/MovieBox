@@ -86,7 +86,7 @@ export default function CustomDrawerContent(props) {
         >
           {user?.photoURL ? (
             <Image 
-              source={{ uri: user.photoURL }} 
+              source={{ uri: user.photoURL || user.profilePicture }} 
               style={styles.avatar} 
             />
           ) : (
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 4,
-    fontFamily: 'Ramabhadra_400Regular',
+    fontFamily: 'Nunito_400Regular',
   },
   userEmail: {
     fontSize: 14,
