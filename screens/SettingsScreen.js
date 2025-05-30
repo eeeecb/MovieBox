@@ -21,8 +21,6 @@ import { useAuth } from '../hooks/useAuth';
 import { useFavorites } from '../hooks/useFavorites';
 import ThemePreview from '../components/ThemePreview';
 
-import SimpleDebug from '../components/SimpleDebug';
-
 export default function SettingsScreen({ navigation }) {
   const { 
     theme, 
@@ -290,8 +288,6 @@ export default function SettingsScreen({ navigation }) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
-
-      <SimpleDebug />
       
       {/* Header */}
       <View style={[styles.header, { 
