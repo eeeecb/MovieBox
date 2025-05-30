@@ -8,8 +8,7 @@ import {
   Image, 
   TouchableOpacity, 
   SafeAreaView, 
-  ActivityIndicator,
-  Alert
+  ActivityIndicator
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -19,6 +18,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { useFavorites } from '../hooks/useFavorites';
 import { tmdbApi } from '../services/tmdbApi';
+import { showConfirmAlert, showErrorAlert } from '../utils/crossPlatformAlert';
 
 export default function FavoritesScreen({ navigation }) {
   const { theme, isDark } = useTheme();
@@ -27,37 +27,32 @@ export default function FavoritesScreen({ navigation }) {
   
   const [removingId, setRemovingId] = useState(null);
   
-  // Função para remover um favorito
+  // Função para remover um favorito - CORRIGIDA
   const handleRemoveFavorite = async (movieId, movieTitle) => {
-    showErrorAlert(
+    showConfirmAlert(
       'Remover Favorito',
       `Tem certeza que deseja remover "${movieTitle}" dos seus favoritos?`,
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel'
-        },
-        {
-          text: 'Remover',
-          style: 'destructive',
-          onPress: async () => {
-            setRemovingId(movieId);
-            
-            try {
-              const result = await removeFavorite(movieId);
-              
-              if (!result.success) {
-                showErrorAlert('Erro', result.error || 'Erro ao remover favorito');
-              }
-            } catch (error) {
-              console.error('Erro ao remover favorito:', error);
-              showErrorAlert('Erro', 'Erro inesperado ao remover favorito');
-            } finally {
-              setRemovingId(null);
-            }
+      async () => {
+        // onConfirm - quando usuário confirma a remoção
+        setRemovingId(movieId);
+        
+        try {
+          const result = await removeFavorite(movieId);
+          
+          if (!result.success) {
+            showErrorAlert('Erro', result.error || 'Erro ao remover favorito');
           }
+        } catch (error) {
+          console.error('Erro ao remover favorito:', error);
+          showErrorAlert('Erro', 'Erro inesperado ao remover favorito');
+        } finally {
+          setRemovingId(null);
         }
-      ]
+      },
+      () => {
+        // onCancel - quando usuário cancela
+        console.log('Remoção cancelada pelo usuário');
+      }
     );
   };
   
