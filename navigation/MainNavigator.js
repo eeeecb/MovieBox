@@ -1,5 +1,6 @@
 // navigation/MainNavigator.js
 import React from 'react';
+import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -25,6 +26,20 @@ import CustomDrawerContent from '../components/CustomDrawerContent';
 const Drawer = createDrawerNavigator();
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+// Componente de Loading para autenticação
+function AuthLoadingScreen() {
+  const { theme } = useTheme();
+  
+  return (
+    <View style={[styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+      <ActivityIndicator size="large" color={theme.colors.primary} />
+      <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+        Verificando autenticação...
+      </Text>
+    </View>
+  );
+}
 
 // Stack de navegação para filmes
 function MoviesStack() {
@@ -69,7 +84,13 @@ function TabNavigator() {
         },
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.tabBarInactive,
-        tabBarStyle: { backgroundColor: theme.colors.tabBar },
+        tabBarStyle: { 
+          backgroundColor: theme.colors.tabBar,
+          borderTopColor: theme.colors.border,
+        },
+        tabBarLabelStyle: {
+          fontFamily: 'EncodeSansExpanded_400Regular',
+        },
       })}
     >
       <Tab.Screen 
@@ -99,20 +120,6 @@ function DrawerNavigator() {
           backgroundColor: theme.colors.card,
           width: 280,
         },
-        drawerContentOptions: {
-          contentContainerStyle: {
-            padding: 0,
-            margin: 0,
-            paddingHorizontal: 0,
-            paddingVertical: 0,
-          },
-          style: {
-            padding: 0,
-            margin: 0,
-            paddingHorizontal: 0,
-            paddingVertical: 0,
-          },
-        },
         drawerActiveTintColor: theme.colors.primary,
         drawerInactiveTintColor: theme.colors.text,
         drawerItemStyle: {
@@ -122,6 +129,7 @@ function DrawerNavigator() {
         },
         drawerLabelStyle: {
           marginLeft: -16,
+          fontFamily: 'EncodeSansExpanded_400Regular',
         },
       }}
     >
@@ -159,20 +167,35 @@ function DrawerNavigator() {
   );
 }
 
-// Stack Navigator principal (inclui tela de login)
+// Stack Navigator principal
 function MainStack() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, isInitializing } = useAuth();
 
-  if (loading) {
-    return null; // Ou um componente de loading
+  // Mostrar loading enquanto inicializa ou está carregando
+  if (isInitializing || loading) {
+    return <AuthLoadingScreen />;
   }
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {isAuthenticated ? (
-        <Stack.Screen name="DrawerNav" component={DrawerNavigator} />
+        // Usuário autenticado
+        <Stack.Screen 
+          name="DrawerNav" 
+          component={DrawerNavigator}
+          options={{
+            animationTypeForReplace: 'push',
+          }}
+        />
       ) : (
-        <Stack.Screen name="Login" component={LoginScreen} />
+        // Usuário não autenticado
+        <Stack.Screen 
+          name="Login" 
+          component={LoginScreen}
+          options={{
+            animationTypeForReplace: 'pop',
+          }}
+        />
       )}
     </Stack.Navigator>
   );
@@ -191,6 +214,7 @@ export default function MainNavigator() {
       card: theme.colors.card,
       text: theme.colors.text,
       border: theme.colors.border,
+      notification: theme.colors.accent,
     },
   };
 
@@ -200,3 +224,18 @@ export default function MainNavigator() {
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    textAlign: 'center',
+    fontFamily: 'EncodeSansExpanded_400Regular',
+  },
+});

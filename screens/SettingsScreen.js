@@ -21,6 +21,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useFavorites } from '../hooks/useFavorites';
 import ThemePreview from '../components/ThemePreview';
 
+import SimpleDebug from '../components/SimpleDebug';
+
 export default function SettingsScreen({ navigation }) {
   const { 
     theme, 
@@ -31,7 +33,7 @@ export default function SettingsScreen({ navigation }) {
     setSystemTheme 
   } = useTheme();
   
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, updatePreferences } = useAuth();
   const { favorites } = useFavorites(user?.uid);
   
   // Estados para configurações
@@ -39,11 +41,22 @@ export default function SettingsScreen({ navigation }) {
   const [dataAutoSync, setDataAutoSync] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
+  const [isUpdatingPreferences, setIsUpdatingPreferences] = useState(false);
 
-  // Carregar configurações do AsyncStorage
+  // Carregar configurações
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
+    loadSettings();
+  }, [user]);
+
+  const loadSettings = async () => {
+    try {
+      if (isAuthenticated && user?.preferences) {
+        // Usuário logado: usar preferências do Firebase
+        const { notifications = true, autoSync = true } = user.preferences;
+        setNotificationsEnabled(notifications);
+        setDataAutoSync(autoSync);
+      } else {
+        // Fallback para AsyncStorage
         const [storedNotifications, storedAutoSync] = await Promise.all([
           AsyncStorage.getItem('@notifications_enabled'),
           AsyncStorage.getItem('@auto_sync_enabled')
@@ -56,38 +69,55 @@ export default function SettingsScreen({ navigation }) {
         if (storedAutoSync !== null) {
           setDataAutoSync(JSON.parse(storedAutoSync));
         }
-      } catch (error) {
-        console.error('Erro ao carregar configurações:', error);
-      } finally {
-        setSettingsLoading(false);
       }
-    };
+    } catch (error) {
+      console.error('Erro ao carregar configurações:', error);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  // Salvar preferências
+  const savePreference = async (key, value) => {
+    setIsUpdatingPreferences(true);
     
-    loadSettings();
-  }, []);
+    try {
+      if (isAuthenticated && updatePreferences) {
+        // Salvar no Firebase
+        const currentPreferences = user?.preferences || {};
+        await updatePreferences({
+          ...currentPreferences,
+          [key]: value
+        });
+      } else {
+        // Fallback para AsyncStorage
+        await AsyncStorage.setItem(`@${key}_enabled`, JSON.stringify(value));
+      }
+    } catch (error) {
+      console.error(`Erro ao salvar ${key}:`, error);
+      Alert.alert('Erro', `Não foi possível salvar a configuração de ${key}`);
+      
+      // Reverter valor em caso de erro
+      if (key === 'notifications') {
+        setNotificationsEnabled(!value);
+      } else if (key === 'autoSync') {
+        setDataAutoSync(!value);
+      }
+    } finally {
+      setIsUpdatingPreferences(false);
+    }
+  };
   
   // Função para alternar notificações
   const toggleNotifications = async (value) => {
-    try {
-      setNotificationsEnabled(value);
-      await AsyncStorage.setItem('@notifications_enabled', JSON.stringify(value));
-    } catch (error) {
-      console.error('Erro ao salvar configuração de notificações:', error);
-      Alert.alert('Erro', 'Não foi possível salvar a configuração de notificações');
-      setNotificationsEnabled(!value); // Reverter em caso de erro
-    }
+    setNotificationsEnabled(value);
+    await savePreference('notifications', value);
   };
   
   // Função para alternar sincronização automática
   const toggleAutoSync = async (value) => {
-    try {
-      setDataAutoSync(value);
-      await AsyncStorage.setItem('@auto_sync_enabled', JSON.stringify(value));
-    } catch (error) {
-      console.error('Erro ao salvar configuração de sincronização:', error);
-      Alert.alert('Erro', 'Não foi possível salvar a configuração de sincronização');
-      setDataAutoSync(!value); // Reverter em caso de erro
-    }
+    setDataAutoSync(value);
+    await savePreference('autoSync', value);
   };
   
   // Função para logout
@@ -138,7 +168,22 @@ export default function SettingsScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Aqui você pode implementar a limpeza do cache conforme necessário
+              // Limpar apenas cache, manter preferências
+              const keysToKeep = [
+                '@theme_preference',
+                '@use_system_theme',
+                '@last_manual_theme',
+                '@notifications_enabled',
+                '@auto_sync_enabled'
+              ];
+              
+              const allKeys = await AsyncStorage.getAllKeys();
+              const keysToRemove = allKeys.filter(key => !keysToKeep.includes(key));
+              
+              if (keysToRemove.length > 0) {
+                await AsyncStorage.multiRemove(keysToRemove);
+              }
+              
               Alert.alert('Sucesso', 'Cache limpo com sucesso');
             } catch (error) {
               Alert.alert('Erro', 'Erro ao limpar cache');
@@ -245,6 +290,8 @@ export default function SettingsScreen({ navigation }) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
+
+      <SimpleDebug />
       
       {/* Header */}
       <View style={[styles.header, { 
@@ -257,7 +304,11 @@ export default function SettingsScreen({ navigation }) {
         <Text style={[styles.headerTitle, { color: theme.colors.primary }]}>
           Configurações
         </Text>
-        <View style={{ width: 24 }} />
+        {isUpdatingPreferences ? (
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
       </View>
       
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -296,6 +347,7 @@ export default function SettingsScreen({ navigation }) {
               ios_backgroundColor="#3e3e3e"
               onValueChange={setSystemTheme}
               value={useSystemTheme}
+              disabled={isUpdatingPreferences}
             />
           </View>
         </View>
@@ -304,6 +356,11 @@ export default function SettingsScreen({ navigation }) {
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
             Preferências
+            {isAuthenticated && (
+              <Text style={[styles.syncIndicator, { color: theme.colors.primary }]}>
+                {' '}🔄 Sincronizado
+              </Text>
+            )}
           </Text>
           
           <View style={styles.settingRow}>
@@ -319,6 +376,7 @@ export default function SettingsScreen({ navigation }) {
               ios_backgroundColor="#3e3e3e"
               onValueChange={toggleNotifications}
               value={notificationsEnabled}
+              disabled={isUpdatingPreferences}
             />
           </View>
           
@@ -335,6 +393,7 @@ export default function SettingsScreen({ navigation }) {
               ios_backgroundColor="#3e3e3e"
               onValueChange={toggleAutoSync}
               value={dataAutoSync}
+              disabled={isUpdatingPreferences}
             />
           </View>
         </View>
@@ -371,6 +430,9 @@ export default function SettingsScreen({ navigation }) {
             </Text>
             <Text style={[styles.appDescription, { color: theme.colors.secondaryText }]}>
               Um aplicativo para os amantes de cinema descobrirem e organizarem seus filmes favoritos.
+            </Text>
+            <Text style={[styles.storageInfo, { color: theme.colors.secondaryText }]}>
+              {isAuthenticated ? '☁️ Dados sincronizados com Firebase' : '📱 Dados armazenados localmente'}
             </Text>
           </View>
         </View>
@@ -431,6 +493,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontFamily: 'Nunito_400Regular',
   },
+  syncIndicator: {
+    fontSize: 14,
+    fontWeight: 'normal',
+  },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -455,14 +521,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
-  // Visualização de temas
   themePreviewContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginBottom: 16,
     gap: 16,
   },
-  // Sobre o app
   aboutContainer: {
     alignItems: 'center',
     paddingVertical: 8,
@@ -482,6 +546,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 8,
+    fontFamily: 'EncodeSansExpanded_400Regular',
+  },
+  storageInfo: {
+    fontSize: 12,
+    textAlign: 'center',
+    fontStyle: 'italic',
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
 });
