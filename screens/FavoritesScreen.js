@@ -29,7 +29,7 @@ export default function FavoritesScreen({ navigation }) {
   
   // Função para remover um favorito
   const handleRemoveFavorite = async (movieId, movieTitle) => {
-    Alert.alert(
+    showErrorAlert(
       'Remover Favorito',
       `Tem certeza que deseja remover "${movieTitle}" dos seus favoritos?`,
       [
@@ -47,11 +47,11 @@ export default function FavoritesScreen({ navigation }) {
               const result = await removeFavorite(movieId);
               
               if (!result.success) {
-                Alert.alert('Erro', result.error || 'Erro ao remover favorito');
+                showErrorAlert('Erro', result.error || 'Erro ao remover favorito');
               }
             } catch (error) {
               console.error('Erro ao remover favorito:', error);
-              Alert.alert('Erro', 'Erro inesperado ao remover favorito');
+              showErrorAlert('Erro', 'Erro inesperado ao remover favorito');
             } finally {
               setRemovingId(null);
             }

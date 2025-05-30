@@ -8,7 +8,6 @@ import {
   TouchableOpacity, 
   Switch, 
   SafeAreaView,
-  Alert,
   ActivityIndicator
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +19,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { useFavorites } from '../hooks/useFavorites';
 import ThemePreview from '../components/ThemePreview';
+import { showConfirmAlert, showInfoAlert, showErrorAlert } from '../utils/crossPlatformAlert';
 
 export default function SettingsScreen({ navigation }) {
   const { 
@@ -93,7 +93,7 @@ export default function SettingsScreen({ navigation }) {
       }
     } catch (error) {
       console.error(`Erro ao salvar ${key}:`, error);
-      Alert.alert('Erro', `Não foi possível salvar a configuração de ${key}`);
+      showErrorAlert('Erro', `Não foi possível salvar a configuração de ${key}`);
       
       // Reverter valor em caso de erro
       if (key === 'notifications') {
@@ -118,77 +118,57 @@ export default function SettingsScreen({ navigation }) {
     await savePreference('autoSync', value);
   };
   
-  // Função para logout
+  // Função para logout usando cross-platform alert
   const handleLogout = () => {
-    Alert.alert(
+    showConfirmAlert(
       'Confirmação',
       'Tem certeza que deseja sair da sua conta?',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel'
-        },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: async () => {
-            setIsLoggingOut(true);
-            
-            try {
-              const result = await logout();
-              
-              if (!result.success) {
-                Alert.alert('Erro', result.error || 'Erro ao fazer logout');
-              }
-            } catch (error) {
-              Alert.alert('Erro', 'Erro inesperado ao fazer logout');
-            } finally {
-              setIsLoggingOut(false);
-            }
+      async () => {
+        setIsLoggingOut(true);
+        
+        try {
+          const result = await logout();
+          
+          if (!result.success) {
+            showErrorAlert('Erro', result.error || 'Erro ao fazer logout');
           }
+        } catch (error) {
+          showErrorAlert('Erro', 'Erro inesperado ao fazer logout');
+        } finally {
+          setIsLoggingOut(false);
         }
-      ]
+      }
     );
   };
 
   // Função para limpar cache
   const handleClearCache = () => {
-    Alert.alert(
+    showConfirmAlert(
       'Limpar Cache',
       'Isso irá remover todos os dados temporários do aplicativo. Deseja continuar?',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel'
-        },
-        {
-          text: 'Limpar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Limpar apenas cache, manter preferências
-              const keysToKeep = [
-                '@theme_preference',
-                '@use_system_theme',
-                '@last_manual_theme',
-                '@notifications_enabled',
-                '@auto_sync_enabled'
-              ];
-              
-              const allKeys = await AsyncStorage.getAllKeys();
-              const keysToRemove = allKeys.filter(key => !keysToKeep.includes(key));
-              
-              if (keysToRemove.length > 0) {
-                await AsyncStorage.multiRemove(keysToRemove);
-              }
-              
-              Alert.alert('Sucesso', 'Cache limpo com sucesso');
-            } catch (error) {
-              Alert.alert('Erro', 'Erro ao limpar cache');
-            }
+      async () => {
+        try {
+          // Limpar apenas cache, manter preferências
+          const keysToKeep = [
+            '@theme_preference',
+            '@use_system_theme',
+            '@last_manual_theme',
+            '@notifications_enabled',
+            '@auto_sync_enabled'
+          ];
+          
+          const allKeys = await AsyncStorage.getAllKeys();
+          const keysToRemove = allKeys.filter(key => !keysToKeep.includes(key));
+          
+          if (keysToRemove.length > 0) {
+            await AsyncStorage.multiRemove(keysToRemove);
           }
+          
+          showInfoAlert('Sucesso', 'Cache limpo com sucesso');
+        } catch (error) {
+          showErrorAlert('Erro', 'Erro ao limpar cache');
         }
-      ]
+      }
     );
   };
 

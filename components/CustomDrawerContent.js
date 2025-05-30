@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Image,
   TouchableOpacity,
-  Alert,
   ScrollView,
   ActivityIndicator
 } from 'react-native';
@@ -15,6 +14,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { debugLog, errorLog, successLog } from '../config/debugConfig';
+import { showLogoutConfirm, showErrorAlert } from '../utils/crossPlatformAlert';
 
 export default function CustomDrawerContent(props) {
   const { theme } = useTheme();
@@ -32,109 +32,94 @@ export default function CustomDrawerContent(props) {
       uid: user?.uid
     });
     
-    Alert.alert(
-      'Confirmação',
-      'Tem certeza que deseja sair da sua conta?',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-          onPress: () => {
-            debugLog('DRAWER', 'Logout cancelado pelo usuário');
-          }
-        },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: async () => {
-            debugLog('DRAWER', '==========================================');
-            debugLog('DRAWER', '🚀 INICIANDO PROCESSO DE LOGOUT');
-            debugLog('DRAWER', '==========================================');
-            debugLog('DRAWER', 'Timestamp:', new Date().toISOString());
-            debugLog('DRAWER', 'Estado antes do logout:', {
-              isLoggingOut: isLoggingOut,
-              hasUser: !!user,
-              userEmail: user?.email
-            });
-            
-            setIsLoggingOut(true);
-            debugLog('DRAWER', 'Estado de loading ativado');
+    // Usar função cross-platform para o alert de confirmação
+    showLogoutConfirm(
+      // Função onConfirm (quando usuário confirma o logout)
+      async () => {
+        debugLog('DRAWER', '==========================================');
+        debugLog('DRAWER', '🚀 INICIANDO PROCESSO DE LOGOUT');
+        debugLog('DRAWER', '==========================================');
+        debugLog('DRAWER', 'Timestamp:', new Date().toISOString());
+        debugLog('DRAWER', 'Estado antes do logout:', {
+          isLoggingOut: isLoggingOut,
+          hasUser: !!user,
+          userEmail: user?.email
+        });
+        
+        setIsLoggingOut(true);
+        debugLog('DRAWER', 'Estado de loading ativado');
 
-            try {
-              debugLog('DRAWER', '📞 Chamando função de logout do hook...');
-              debugLog('DRAWER', 'Hook de logout disponível:', typeof logout === 'function');
-              
-              const startTime = Date.now();
-              const result = await logout();
-              const endTime = Date.now();
-              
-              debugLog('DRAWER', `⏱️ Tempo de execução do logout: ${endTime - startTime}ms`);
-              debugLog('DRAWER', '📋 Resultado completo do logout:', {
-                success: result?.success,
-                error: result?.error,
-                timestamp: new Date().toISOString()
-              });
-              
-              if (result?.success) {
-                successLog('DRAWER', 'LOGOUT BEM-SUCEDIDO!');
-                debugLog('DRAWER', '🎯 Usuário deve ser redirecionado automaticamente');
-                debugLog('DRAWER', '🧹 Limpeza de estado local realizada');
-                
-                // Não mostrar alert de sucesso, pois o usuário será redirecionado
-              } else {
-                errorLog('DRAWER', 'FALHA NO LOGOUT');
-                debugLog('DRAWER', '🚨 Erro reportado:', result?.error);
-                debugLog('DRAWER', '📱 Exibindo alert de erro para o usuário');
-                
-                Alert.alert(
-                  'Erro no Logout',
-                  result?.error || 'Erro ao fazer logout. Tente novamente.',
-                  [{ 
-                    text: 'OK',
-                    onPress: () => {
-                      debugLog('DRAWER', 'Alert de erro fechado pelo usuário');
-                    }
-                  }]
-                );
+        try {
+          debugLog('DRAWER', '📞 Chamando função de logout do hook...');
+          debugLog('DRAWER', 'Hook de logout disponível:', typeof logout === 'function');
+          
+          const startTime = Date.now();
+          const result = await logout();
+          const endTime = Date.now();
+          
+          debugLog('DRAWER', `⏱️ Tempo de execução do logout: ${endTime - startTime}ms`);
+          debugLog('DRAWER', '📋 Resultado completo do logout:', {
+            success: result?.success,
+            error: result?.error,
+            timestamp: new Date().toISOString()
+          });
+          
+          if (result?.success) {
+            successLog('DRAWER', 'LOGOUT BEM-SUCEDIDO!');
+            debugLog('DRAWER', '🎯 Usuário deve ser redirecionado automaticamente');
+            debugLog('DRAWER', '🧹 Limpeza de estado local realizada');
+            
+            // Não mostrar alert de sucesso, pois o usuário será redirecionado
+          } else {
+            errorLog('DRAWER', 'FALHA NO LOGOUT');
+            debugLog('DRAWER', '🚨 Erro reportado:', result?.error);
+            debugLog('DRAWER', '📱 Exibindo alert de erro para o usuário');
+            
+            showErrorAlert(
+              'Erro no Logout',
+              result?.error || 'Erro ao fazer logout. Tente novamente.',
+              () => {
+                debugLog('DRAWER', 'Alert de erro fechado pelo usuário');
               }
-            } catch (error) {
-              errorLog('DRAWER', '💥 EXCEÇÃO CAPTURADA NO LOGOUT', {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-                timestamp: new Date().toISOString()
-              });
-              
-              Alert.alert(
-                'Erro Inesperado',
-                `Erro inesperado ao fazer logout: ${error.message}`,
-                [{ 
-                  text: 'OK',
-                  onPress: () => {
-                    debugLog('DRAWER', 'Alert de exceção fechado pelo usuário');
-                  }
-                }]
-              );
-            } finally {
-              debugLog('DRAWER', '🏁 FINALIZANDO PROCESSO DE LOGOUT');
-              debugLog('DRAWER', '⏰ Timestamp final:', new Date().toISOString());
-              debugLog('DRAWER', '🔄 Desativando estado de loading...');
-              
-              setIsLoggingOut(false);
-              
-              debugLog('DRAWER', '✨ Estado de loading desativado');
-              debugLog('DRAWER', '==========================================');
-              debugLog('DRAWER', '📊 PROCESSO DE LOGOUT CONCLUÍDO');
-              debugLog('DRAWER', '==========================================');
-              
-              // Timeout para limpar logs do estado após alguns segundos
-              setTimeout(() => {
-                debugLog('DRAWER', '🧹 Limpeza de logs de estado após 3 segundos');
-              }, 3000);
-            }
+            );
           }
+        } catch (error) {
+          errorLog('DRAWER', '💥 EXCEÇÃO CAPTURADA NO LOGOUT', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            timestamp: new Date().toISOString()
+          });
+          
+          showErrorAlert(
+            'Erro Inesperado',
+            `Erro inesperado ao fazer logout: ${error.message}`,
+            () => {
+              debugLog('DRAWER', 'Alert de exceção fechado pelo usuário');
+            }
+          );
+        } finally {
+          debugLog('DRAWER', '🏁 FINALIZANDO PROCESSO DE LOGOUT');
+          debugLog('DRAWER', '⏰ Timestamp final:', new Date().toISOString());
+          debugLog('DRAWER', '🔄 Desativando estado de loading...');
+          
+          setIsLoggingOut(false);
+          
+          debugLog('DRAWER', '✨ Estado de loading desativado');
+          debugLog('DRAWER', '==========================================');
+          debugLog('DRAWER', '📊 PROCESSO DE LOGOUT CONCLUÍDO');
+          debugLog('DRAWER', '==========================================');
+          
+          // Timeout para limpar logs do estado após alguns segundos
+          setTimeout(() => {
+            debugLog('DRAWER', '🧹 Limpeza de logs de estado após 3 segundos');
+          }, 3000);
         }
-      ]
+      },
+      // Função onCancel (quando usuário cancela o logout)
+      () => {
+        debugLog('DRAWER', 'Logout cancelado pelo usuário');
+      }
     );
   };
 

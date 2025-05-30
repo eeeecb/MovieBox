@@ -10,7 +10,6 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,6 +19,7 @@ import Constants from "expo-constants";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
 import { useFavorites } from "../hooks/useFavorites";
+import { showErrorAlert, showSuccessAlert } from '../utils/crossPlatformAlert';
 
 export default function ProfileScreen({ navigation }) {
   const { theme, isDark } = useTheme();
@@ -33,7 +33,7 @@ export default function ProfileScreen({ navigation }) {
 
   const handleSaveProfile = async () => {
     if (!editName.trim()) {
-      Alert.alert("Erro", "Por favor, insira um nome válido");
+      showErrorAlert("Erro", "Por favor, insira um nome válido");
       return;
     }
 
@@ -44,12 +44,12 @@ export default function ProfileScreen({ navigation }) {
 
       if (result.success) {
         setIsEditing(false);
-        Alert.alert("Sucesso", "Perfil atualizado com sucesso");
+        showErrorAlert("Sucesso", "Perfil atualizado com sucesso");
       } else {
-        Alert.alert("Erro", result.error || "Erro ao atualizar perfil");
+        showErrorAlert("Erro", result.error || "Erro ao atualizar perfil");
       }
     } catch (error) {
-      Alert.alert("Erro", error.message);
+      showErrorAlert("Erro", error.message);
     } finally {
       setIsUpdating(false);
     }
@@ -65,7 +65,7 @@ const pickImage = async () => {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (status !== 'granted') {
-        Alert.alert('Permissão negada', 'Precisamos de permissão para acessar suas fotos');
+        showErrorAlert('Permissão negada', 'Precisamos de permissão para acessar suas fotos');
         return;
       }
       
@@ -95,13 +95,13 @@ const pickImage = async () => {
         const updateResult = await updateProfilePicture(imageUri, fileInfo);
         
         if (updateResult.success) {
-          Alert.alert('Sucesso', 'Foto de perfil atualizada com sucesso!');
+          showErrorAlert('Sucesso', 'Foto de perfil atualizada com sucesso!');
         } else {
-          Alert.alert('Erro', updateResult.error || 'Erro ao atualizar foto');
+          showErrorAlert('Erro', updateResult.error || 'Erro ao atualizar foto');
         }
       }
     } catch (error) {
-      Alert.alert('Erro', 'Erro ao selecionar imagem: ' + error.message);
+      showErrorAlert('Erro', 'Erro ao selecionar imagem: ' + error.message);
       console.error('Erro no pickImage:', error);
     } finally {
       setIsUploadingImage(false);
@@ -113,7 +113,7 @@ const pickImage = async () => {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       
       if (status !== 'granted') {
-        Alert.alert('Permissão negada', 'Precisamos de permissão para usar a câmera');
+        showErrorAlert('Permissão negada', 'Precisamos de permissão para usar a câmera');
         return;
       }
       
@@ -139,13 +139,13 @@ const pickImage = async () => {
         const updateResult = await updateProfilePicture(imageUri, fileInfo);
         
         if (updateResult.success) {
-          Alert.alert('Sucesso', 'Foto de perfil atualizada com sucesso!');
+          showErrorAlert('Sucesso', 'Foto de perfil atualizada com sucesso!');
         } else {
-          Alert.alert('Erro', updateResult.error || 'Erro ao atualizar foto');
+          showErrorAlert('Erro', updateResult.error || 'Erro ao atualizar foto');
         }
       }
     } catch (error) {
-      Alert.alert('Erro', 'Erro ao tirar foto: ' + error.message);
+      showErrorAlert('Erro', 'Erro ao tirar foto: ' + error.message);
       console.error('Erro no takePhoto:', error);
     } finally {
       setIsUploadingImage(false);
@@ -153,7 +153,7 @@ const pickImage = async () => {
   };
 
   const showImagePickerOptions = () => {
-    Alert.alert(
+    showErrorAlert(
       'Alterar Foto de Perfil',
       'Escolha uma opção:',
       [
