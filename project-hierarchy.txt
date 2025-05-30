@@ -1,0 +1,39 @@
+MovieBox
+├─ App.js
+├─ app.json
+├─ components
+│  ├─ CustomDrawerContent.js
+│  ├─ SimpleDebug.js
+│  └─ ThemePreview.js
+├─ config
+│  └─ debugConfig.js
+├─ contexts
+│  └─ ThemeContext.js
+├─ firebaseConfig.js
+├─ FirebaseInitializer.js
+├─ hooks
+│  ├─ useAuth.js
+│  ├─ useFavorites.js
+│  └─ useMovies.js
+├─ index.js
+├─ metro.config.js
+├─ navigation
+│  └─ MainNavigator.js
+├─ package-lock.json
+├─ package.json
+├─ README.md
+├─ screens
+│  ├─ ActorScreen.js
+│  ├─ FavoritesScreen.js
+│  ├─ HomeScreen.js
+│  ├─ LoginScreen.js
+│  ├─ MovieScreen.js
+│  ├─ ProfileScreen.js
+│  └─ SettingsScreen.js
+├─ services
+│  ├─ firebaseAuth.js
+│  ├─ firebaseStorage.js
+│  ├─ firestoreService.js
+│  └─ tmdbApi.js
+└─ utils
+   └─ crossPlatformAlert.js
