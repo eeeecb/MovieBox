@@ -17,11 +17,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { tmdbApi } from '../services/tmdbApi';
 
-// Hook personalizado para dados do ator
+// Hook personalizado para dados do ator - MELHORADO
 const useActorDetails = (actorId) => {
   const [actorDetails, setActorDetails] = useState(null);
-  const [actorFilmography, setActorFilmography] = useState([]);
+  const [allMovies, setAllMovies] = useState([]); // Todos os filmes
+  const [displayedMovies, setDisplayedMovies] = useState([]); // Filmes exibidos
+  const [moviesPerPage] = useState(10); // Quantos filmes mostrar por vez
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -47,11 +51,14 @@ const useActorDetails = (actorId) => {
         }
 
         if (moviesResult.success) {
-          // Ordenar por data de lançamento e pegar os 10 mais recentes
+          // Ordenar por data de lançamento (mais recentes primeiro)
           const sortedMovies = moviesResult.data
-            .sort((a, b) => new Date(b.release_date || '1900') - new Date(a.release_date || '1900'))
-            .slice(0, 10);
-          setActorFilmography(sortedMovies);
+            .sort((a, b) => new Date(b.release_date || '1900') - new Date(a.release_date || '1900'));
+          
+          setAllMovies(sortedMovies);
+          // Mostrar os primeiros filmes
+          setDisplayedMovies(sortedMovies.slice(0, moviesPerPage));
+          setCurrentPage(1);
         }
       } catch (err) {
         setError('Erro ao buscar dados do ator');
@@ -62,19 +69,50 @@ const useActorDetails = (actorId) => {
     };
 
     fetchActorData();
-  }, [actorId]);
+  }, [actorId, moviesPerPage]);
+
+  // Função para carregar mais filmes
+  const loadMoreMovies = () => {
+    if (loadingMore) return;
+    
+    setLoadingMore(true);
+    
+    // Simular um pequeno delay para melhor UX
+    setTimeout(() => {
+      const nextPage = currentPage + 1;
+      const startIndex = 0;
+      const endIndex = nextPage * moviesPerPage;
+      
+      const newDisplayedMovies = allMovies.slice(startIndex, endIndex);
+      setDisplayedMovies(newDisplayedMovies);
+      setCurrentPage(nextPage);
+      setLoadingMore(false);
+    }, 500);
+  };
+
+  // Verificar se há mais filmes para carregar
+  const hasMoreMovies = displayedMovies.length < allMovies.length;
 
   const refetch = () => {
     if (actorId) {
+      // Reset estados e buscar novamente
+      setCurrentPage(1);
+      setDisplayedMovies([]);
+      setAllMovies([]);
       fetchActorData();
     }
   };
 
   return {
     actorDetails,
-    actorFilmography,
+    actorFilmography: displayedMovies,
+    allMoviesCount: allMovies.length,
+    displayedCount: displayedMovies.length,
     loading,
+    loadingMore,
     error,
+    hasMoreMovies,
+    loadMoreMovies,
     refetch
   };
 };
@@ -88,9 +126,14 @@ export default function ActorScreen({ route, navigation }) {
   // Hook personalizado para dados do ator
   const { 
     actorDetails, 
-    actorFilmography, 
-    loading, 
-    error, 
+    actorFilmography,
+    allMoviesCount,
+    displayedCount, 
+    loading,
+    loadingMore, 
+    error,
+    hasMoreMovies,
+    loadMoreMovies,
     refetch 
   } = useActorDetails(actorId);
 
@@ -153,6 +196,36 @@ export default function ActorScreen({ route, navigation }) {
       </View>
     </TouchableOpacity>
   );
+
+  // Renderizar botão "Carregar mais filmes"
+  const renderLoadMoreButton = () => {
+    if (!hasMoreMovies) return null;
+
+    return (
+      <TouchableOpacity 
+        style={[styles.loadMoreButton, { 
+          backgroundColor: theme.colors.primary,
+          opacity: loadingMore ? 0.7 : 1 
+        }]}
+        onPress={loadMoreMovies}
+        disabled={loadingMore}
+      >
+        {loadingMore ? (
+          <View style={styles.loadMoreContent}>
+            <ActivityIndicator size="small" color="white" />
+            <Text style={styles.loadMoreText}>Carregando...</Text>
+          </View>
+        ) : (
+          <View style={styles.loadMoreContent}>
+            <Ionicons name="add-circle-outline" size={20} color="white" />
+            <Text style={styles.loadMoreText}>
+              Carregar mais filmes ({allMoviesCount - displayedCount} restantes)
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
   
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -260,12 +333,22 @@ export default function ActorScreen({ route, navigation }) {
           
           {/* Seção de filmografia */}
           <View style={styles.filmographySection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              Filmes
-            </Text>
+            <View style={styles.filmographyHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                Filmes
+              </Text>
+              {allMoviesCount > 0 && (
+                <Text style={[styles.movieCount, { color: theme.colors.secondaryText }]}>
+                  Mostrando {displayedCount} de {allMoviesCount}
+                </Text>
+              )}
+            </View>
             
             {actorFilmography.length > 0 ? (
-              actorFilmography.map(movie => renderFilmographyItem(movie))
+              <>
+                {actorFilmography.map(movie => renderFilmographyItem(movie))}
+                {renderLoadMoreButton()}
+              </>
             ) : (
               <Text style={[styles.noDataText, { color: theme.colors.secondaryText }]}>
                 Nenhuma informação de filmografia disponível
@@ -409,11 +492,20 @@ const styles = StyleSheet.create({
   filmographySection: {
     padding: 16,
   },
+  filmographyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 16,
     fontFamily: 'Nunito_400Regular',
+  },
+  movieCount: {
+    fontSize: 14,
+    fontFamily: 'EncodeSansExpanded_400Regular',
   },
   movieItem: {
     borderRadius: 10,
@@ -461,6 +553,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
     fontFamily: 'EncodeSansExpanded_400Regular',
+  },
+  // Estilos para o botão "Carregar mais"
+  loadMoreButton: {
+    marginTop: 16,
+    marginHorizontal: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  loadMoreContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  loadMoreText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+    fontFamily: 'EncodeSansExpanded_500Medium',
   },
   noDataText: {
     fontSize: 16,
