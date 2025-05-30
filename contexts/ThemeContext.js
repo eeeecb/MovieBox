@@ -3,6 +3,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../hooks/useAuth';
+import { debugLog, errorLog, successLog, warnLog } from '../config/debugConfig';
 
 // Definição dos temas
 export const lightTheme = {
@@ -72,6 +73,8 @@ export const ThemeProvider = ({ children }) => {
   useEffect(() => {
     const loadThemePreference = async () => {
       try {
+        debugLog('THEME', 'Carregando preferências de tema...');
+        
         // Sempre carregar do AsyncStorage primeiro (para compatibilidade)
         const [storedTheme, storedUseSystem, storedLastManual] = await Promise.all([
           AsyncStorage.getItem('@theme_preference'),
@@ -88,21 +91,26 @@ export const ThemeProvider = ({ children }) => {
         if (storedLastManual) {
           lastManualToUse = storedLastManual;
           setLastManualTheme(storedLastManual);
+          debugLog('THEME', 'Último tema manual carregado do AsyncStorage:', lastManualToUse);
         }
 
         if (storedUseSystem !== null) {
           useSystemToUse = JSON.parse(storedUseSystem);
           setUseSystemTheme(useSystemToUse);
+          debugLog('THEME', 'Configuração useSystem carregada do AsyncStorage:', useSystemToUse);
         }
 
         if (storedTheme && !useSystemToUse) {
           themeToUse = storedTheme;
+          debugLog('THEME', 'Tema específico carregado do AsyncStorage:', themeToUse);
         }
 
         // Se usuário logado e Firestore disponível, tentar usar preferências da nuvem
         if (isAuthenticated && user?.preferences && user?.firestoreAvailable !== false) {
           try {
             const { theme: cloudTheme, useSystem: cloudUseSystem, lastManual: cloudLastManual } = user.preferences;
+            
+            debugLog('THEME', 'Preferências da nuvem encontradas:', { cloudTheme, cloudUseSystem, cloudLastManual });
             
             if (cloudUseSystem !== undefined) {
               useSystemToUse = cloudUseSystem;
@@ -117,25 +125,34 @@ export const ThemeProvider = ({ children }) => {
             if (!cloudUseSystem && cloudTheme) {
               themeToUse = cloudTheme;
             }
+            
+            successLog('THEME', 'Preferências da nuvem aplicadas com sucesso');
           } catch (error) {
-            console.warn('Erro ao carregar preferências da nuvem:', error);
+            warnLog('THEME', 'Erro ao carregar preferências da nuvem: ' + error.message);
             // Continuar com dados locais
           }
         }
 
         // Aplicar tema
         if (useSystemToUse) {
-          setTheme(systemColorScheme === 'dark' ? darkTheme : lightTheme);
+          const newTheme = systemColorScheme === 'dark' ? darkTheme : lightTheme;
+          setTheme(newTheme);
+          debugLog('THEME', 'Tema do sistema aplicado:', newTheme.name);
         } else {
-          setTheme(themeToUse === 'dark' ? darkTheme : lightTheme);
+          const newTheme = themeToUse === 'dark' ? darkTheme : lightTheme;
+          setTheme(newTheme);
+          debugLog('THEME', 'Tema manual aplicado:', newTheme.name);
         }
 
       } catch (error) {
-        console.error('Erro ao carregar preferência de tema:', error);
+        errorLog('THEME', 'Erro ao carregar preferência de tema:', error);
         // Usar padrões em caso de erro
-        setTheme(systemColorScheme === 'dark' ? darkTheme : lightTheme);
+        const fallbackTheme = systemColorScheme === 'dark' ? darkTheme : lightTheme;
+        setTheme(fallbackTheme);
+        debugLog('THEME', 'Tema fallback aplicado:', fallbackTheme.name);
       } finally {
         setIsThemeLoaded(true);
+        debugLog('THEME', 'Carregamento de tema concluído');
       }
     };
 
@@ -145,13 +162,17 @@ export const ThemeProvider = ({ children }) => {
   // Atualizar tema com base no sistema quando useSystemTheme é true
   useEffect(() => {
     if (useSystemTheme && systemColorScheme) {
-      setTheme(systemColorScheme === 'dark' ? darkTheme : lightTheme);
+      const newTheme = systemColorScheme === 'dark' ? darkTheme : lightTheme;
+      setTheme(newTheme);
+      debugLog('THEME', 'Tema atualizado automaticamente pelo sistema:', newTheme.name);
     }
   }, [systemColorScheme, useSystemTheme]);
 
   // Salvar preferências (com fallback robusto)
   const saveThemePreferences = async (preferences) => {
     try {
+      debugLog('THEME', 'Salvando preferências de tema:', preferences);
+      
       // Sempre salvar no AsyncStorage primeiro (garantia)
       const { theme: themeValue, useSystem, lastManual } = preferences;
       
@@ -168,6 +189,7 @@ export const ThemeProvider = ({ children }) => {
       }
       
       await Promise.all(savePromises);
+      debugLog('THEME', 'Preferências salvas no AsyncStorage');
       
       // Tentar salvar no Firebase se disponível
       if (isAuthenticated && updatePreferences && user?.firestoreAvailable !== false) {
@@ -176,26 +198,27 @@ export const ThemeProvider = ({ children }) => {
             ...user.preferences,
             ...preferences
           });
-          console.log('Preferências de tema salvas na nuvem');
+          successLog('THEME', 'Preferências de tema salvas na nuvem');
         } catch (firebaseError) {
-          console.warn('Não foi possível salvar no Firebase:', firebaseError.message);
+          warnLog('THEME', 'Não foi possível salvar no Firebase: ' + firebaseError.message);
           
           // Se for erro de permissão, mostrar aviso discreto
           if (firebaseError.message?.includes('permission')) {
-            console.warn('💡 Configure as regras do Firestore para sincronizar preferências');
+            warnLog('THEME', 'Configure as regras do Firestore para sincronizar preferências');
           }
           
           // Continuar - dados foram salvos localmente
         }
       }
     } catch (error) {
-      console.error('Erro ao salvar preferências de tema:', error);
+      errorLog('THEME', 'Erro ao salvar preferências de tema:', error);
       // Não interromper fluxo - tema já foi aplicado visualmente
     }
   };
 
   const setDarkTheme = async () => {
     try {
+      debugLog('THEME', 'Definindo tema escuro');
       setTheme(darkTheme);
       setUseSystemTheme(false);
       setLastManualTheme('dark');
@@ -207,12 +230,13 @@ export const ThemeProvider = ({ children }) => {
         lastManual: 'dark'
       });
     } catch (error) {
-      console.error('Erro ao definir tema escuro:', error);
+      errorLog('THEME', 'Erro ao definir tema escuro:', error);
     }
   };
 
   const setLightTheme = async () => {
     try {
+      debugLog('THEME', 'Definindo tema claro');
       setTheme(lightTheme);
       setUseSystemTheme(false);
       setLastManualTheme('light');
@@ -224,12 +248,13 @@ export const ThemeProvider = ({ children }) => {
         lastManual: 'light'
       });
     } catch (error) {
-      console.error('Erro ao definir tema claro:', error);
+      errorLog('THEME', 'Erro ao definir tema claro:', error);
     }
   };
 
   const setSystemTheme = async (useSystem) => {
     try {
+      debugLog('THEME', 'Configurando tema do sistema:', useSystem);
       setUseSystemTheme(useSystem);
       
       if (useSystem) {
@@ -251,14 +276,14 @@ export const ThemeProvider = ({ children }) => {
         });
       }
     } catch (error) {
-      console.error('Erro ao definir tema do sistema:', error);
+      errorLog('THEME', 'Erro ao definir tema do sistema:', error);
     }
   };
 
   // Debug info (apenas em desenvolvimento)
   useEffect(() => {
-    if (__DEV__ && isThemeLoaded) {
-      console.log('🎨 Theme Context:', {
+    if (isThemeLoaded) {
+      debugLog('THEME', 'Estado atual do Theme Context:', {
         currentTheme: theme.name,
         useSystemTheme,
         lastManualTheme,

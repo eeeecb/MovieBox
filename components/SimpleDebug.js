@@ -4,6 +4,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 import { firebaseAuthService } from '../services/firebaseAuth';
+import { debugLog, errorLog, successLog } from '../config/debugConfig';
 
 export default function SimpleDebug() {
   const { theme } = useTheme();
@@ -18,11 +19,11 @@ export default function SimpleDebug() {
   }, [user]);
 
   const checkFirestoreStatus = async () => {
-    console.log('🔍 [DEBUG] Iniciando verificação do Firestore...');
+    debugLog('DEBUG', 'Iniciando verificação do Firestore...');
     
     if (!user?.uid) {
       setFirestoreStatus('Usuário não logado');
-      console.log('🔍 [DEBUG] Usuário não logado');
+      debugLog('DEBUG', 'Usuário não logado');
       return;
     }
 
@@ -30,15 +31,15 @@ export default function SimpleDebug() {
     setLastAction('Verificando Firestore...');
 
     try {
-      console.log('🔍 [DEBUG] Testando acesso ao Firestore para UID:', user.uid);
+      debugLog('DEBUG', 'Testando acesso ao Firestore para UID:', user.uid);
       const access = await firebaseAuthService.checkFirestoreAccess(user.uid);
-      console.log('🔍 [DEBUG] Resultado do acesso:', access);
+      debugLog('DEBUG', 'Resultado do acesso:', access);
       
       if (access.accessible) {
         const status = `✅ Firestore OK (doc ${access.exists ? 'existe' : 'não existe'})`;
         setFirestoreStatus(status);
         setLastAction('✅ Verificação concluída');
-        console.log('🔍 [DEBUG] Firestore acessível:', access);
+        debugLog('DEBUG', 'Firestore acessível:', access);
       } else {
         let status = '';
         if (access.error === 'permission-denied') {
@@ -48,31 +49,31 @@ export default function SimpleDebug() {
         }
         setFirestoreStatus(status);
         setLastAction('❌ Erro na verificação');
-        console.log('🔍 [DEBUG] Firestore inacessível:', access);
+        debugLog('DEBUG', 'Firestore inacessível:', access);
       }
     } catch (error) {
       const status = `❌ Erro: ${error.message}`;
       setFirestoreStatus(status);
       setLastAction('❌ Erro na verificação');
-      console.error('🔍 [DEBUG] Erro ao verificar Firestore:', error);
+      errorLog('DEBUG', 'Erro ao verificar Firestore:', error);
     } finally {
       setIsChecking(false);
     }
   };
 
   const testLogout = async () => {
-    console.log('🔍 [DEBUG] Iniciando teste de logout...');
+    debugLog('DEBUG', 'Iniciando teste de logout...');
     setIsTestingLogout(true);
     setLastAction('Testando logout...');
 
     try {
-      console.log('🔍 [DEBUG] Chamando função de logout...');
+      debugLog('DEBUG', 'Chamando função de logout...');
       const result = await logout();
-      console.log('🔍 [DEBUG] Resultado do logout:', result);
+      debugLog('DEBUG', 'Resultado do logout:', result);
       
       if (result.success) {
         setLastAction('✅ Logout funcionou!');
-        console.log('🔍 [DEBUG] ✅ Logout bem-sucedido');
+        successLog('DEBUG', '✅ Logout bem-sucedido');
         
         // Mostrar alert E log
         Alert.alert(
@@ -82,7 +83,7 @@ export default function SimpleDebug() {
         );
       } else {
         setLastAction(`❌ Erro no logout: ${result.error}`);
-        console.log('🔍 [DEBUG] ❌ Erro no logout:', result.error);
+        errorLog('DEBUG', '❌ Erro no logout:', result.error);
         
         Alert.alert(
           'Teste de Logout',
@@ -93,7 +94,7 @@ export default function SimpleDebug() {
     } catch (error) {
       const errorMsg = `❌ Exceção: ${error.message}`;
       setLastAction(errorMsg);
-      console.error('🔍 [DEBUG] Exceção no logout:', error);
+      errorLog('DEBUG', 'Exceção no logout:', error);
       
       Alert.alert(
         'Teste de Logout',
@@ -111,12 +112,12 @@ export default function SimpleDebug() {
   };
 
   const handleVerifyPress = () => {
-    console.log('🔍 [DEBUG] Botão Verificar pressionado');
+    debugLog('DEBUG', 'Botão Verificar pressionado');
     checkFirestoreStatus();
   };
 
   const handleLogoutPress = () => {
-    console.log('🔍 [DEBUG] Botão Testar Logout pressionado');
+    debugLog('DEBUG', 'Botão Testar Logout pressionado');
     testLogout();
   };
 

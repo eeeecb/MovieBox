@@ -4,6 +4,7 @@ import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/aut
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { debugLog, errorLog, successLog } from './config/debugConfig';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -16,12 +17,16 @@ const firebaseConfig = {
   measurementId: "G-RB3Q30ET88"
 };
 
+debugLog('FIREBASE', 'Iniciando configuração do Firebase...');
+
 // Verificar se o Firebase já foi inicializado
 let app;
 if (getApps().length === 0) {
   app = initializeApp(firebaseConfig);
+  debugLog('FIREBASE', 'Nova instância do Firebase criada');
 } else {
   app = getApps()[0];
+  debugLog('FIREBASE', 'Usando instância existente do Firebase');
 }
 
 // Configurar Auth com tratamento de erro para Expo Go
@@ -31,9 +36,10 @@ try {
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage)
   });
+  debugLog('FIREBASE', 'Auth inicializado com AsyncStorage persistence');
 } catch (error) {
   // Se falhar (já inicializado), usar getAuth
-  console.log('Auth já inicializado, usando getAuth');
+  debugLog('FIREBASE', 'Auth já inicializado, usando getAuth');
   auth = getAuth(app);
 }
 
@@ -41,38 +47,38 @@ try {
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Log de inicialização apenas em desenvolvimento
-if (__DEV__) {
-  console.log('✅ Firebase inicializado com sucesso:', {
-    auth: !!auth,
-    db: !!db,
-    storage: !!storage,
-    appName: app.name,
-    projectId: firebaseConfig.projectId
-  });
-}
+// Log de inicialização
+debugLog('FIREBASE', 'Serviços Firebase inicializados:', {
+  auth: !!auth,
+  db: !!db,
+  storage: !!storage,
+  appName: app.name,
+  projectId: firebaseConfig.projectId
+});
+
+successLog('FIREBASE', 'Firebase configurado com sucesso');
 
 export { auth, db, storage };
 export default app;
 
 // Função para debug
 export const debugFirebase = () => {
-  if (__DEV__) {
-    console.log('Estado atual do Firebase:', {
-      currentUser: auth.currentUser?.email || 'Nenhum usuário',
-      isSignedIn: !!auth.currentUser,
-      appName: app.name,
-      authInitialized: !!auth
-    });
-  }
+  debugLog('FIREBASE', 'Estado atual do Firebase:', {
+    currentUser: auth.currentUser?.email || 'Nenhum usuário',
+    isSignedIn: !!auth.currentUser,
+    appName: app.name,
+    authInitialized: !!auth
+  });
 };
 
 // Função para verificar se o Firebase está pronto
 export const isFirebaseReady = () => {
   try {
-    return !!(auth && db && storage);
+    const isReady = !!(auth && db && storage);
+    debugLog('FIREBASE', 'Verificação de prontidão:', { isReady });
+    return isReady;
   } catch (error) {
-    console.error('Erro ao verificar Firebase:', error);
+    errorLog('FIREBASE', 'Erro ao verificar Firebase:', error);
     return false;
   }
 };
@@ -80,8 +86,11 @@ export const isFirebaseReady = () => {
 // Função para aguardar inicialização completa
 export const waitForFirebase = () => {
   return new Promise((resolve) => {
+    debugLog('FIREBASE', 'Aguardando inicialização completa...');
+    
     const checkReady = () => {
       if (isFirebaseReady()) {
+        debugLog('FIREBASE', 'Firebase está pronto!');
         resolve(true);
       } else {
         setTimeout(checkReady, 100);
