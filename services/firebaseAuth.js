@@ -10,13 +10,31 @@ import {
   reauthenticateWithCredential
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { auth, db } from '../firebaseConfig';
 import { firebaseStorageService } from './firebaseStorage';
 
+// Importação dinâmica para evitar problemas de inicialização
+let auth, db;
+
+const initializeServices = async () => {
+  if (!auth || !db) {
+    const { auth: firebaseAuth, db: firebaseDb } = await import('../firebaseConfig');
+    auth = firebaseAuth;
+    db = firebaseDb;
+  }
+  return { auth, db };
+};
+
 export const firebaseAuthService = {
+  // Garantir que os serviços estão inicializados
+  async ensureInitialized() {
+    return await initializeServices();
+  },
+
   // Registrar novo usuário
   async register(name, email, password) {
     try {
+      await this.ensureInitialized();
+      
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -40,15 +58,15 @@ export const firebaseAuthService = {
             theme: 'system'
           }
         });
-        console.log('Documento do usuário criado no Firestore');
+        console.log('✅ Documento do usuário criado no Firestore');
       } catch (firestoreError) {
-        console.warn('Não foi possível criar documento no Firestore:', firestoreError.message);
+        console.warn('⚠️ Não foi possível criar documento no Firestore:', firestoreError.message);
         // Continuar mesmo se falhar - o usuário foi criado no Auth
       }
       
       return { success: true, user };
     } catch (error) {
-      console.error('Erro no registro:', error);
+      console.error('❌ Erro no registro:', error);
       
       // Tratar erros específicos
       let errorMessage = 'Erro ao criar conta';
@@ -67,6 +85,8 @@ export const firebaseAuthService = {
   // Login
   async login(email, password) {
     try {
+      await this.ensureInitialized();
+      
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
@@ -76,7 +96,7 @@ export const firebaseAuthService = {
           lastLoginAt: new Date().toISOString()
         });
       } catch (firestoreError) {
-        console.warn('Não foi possível atualizar último login:', firestoreError.message);
+        console.warn('⚠️ Não foi possível atualizar último login:', firestoreError.message);
         // Não é crítico, continuar
       }
       
@@ -86,7 +106,7 @@ export const firebaseAuthService = {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         userData = userDoc.exists() ? userDoc.data() : null;
       } catch (firestoreError) {
-        console.warn('Não foi possível buscar dados do Firestore:', firestoreError.message);
+        console.warn('⚠️ Não foi possível buscar dados do Firestore:', firestoreError.message);
         // Usar dados padrão
         userData = {
           preferences: {
@@ -108,7 +128,7 @@ export const firebaseAuthService = {
         }
       };
     } catch (error) {
-      console.error('Erro no login:', error);
+      console.error('❌ Erro no login:', error);
       
       // Tratar erros específicos
       let errorMessage = 'Erro ao fazer login';
@@ -129,6 +149,8 @@ export const firebaseAuthService = {
   // Logout melhorado
   async logout() {
     try {
+      await this.ensureInitialized();
+      
       // Garantir que há um usuário logado
       if (!auth.currentUser) {
         return { success: true }; // Já está deslogado
@@ -137,16 +159,18 @@ export const firebaseAuthService = {
       // Fazer logout do Firebase Auth
       await signOut(auth);
       
-      console.log('Logout realizado com sucesso');
+      console.log('✅ Logout realizado com sucesso');
       return { success: true };
     } catch (error) {
-      console.error('Erro no logout:', error);
+      console.error('❌ Erro no logout:', error);
       
       // Mesmo com erro, tentar forçar o logout
       try {
-        await signOut(auth);
+        if (auth) {
+          await signOut(auth);
+        }
       } catch (forceError) {
-        console.error('Erro ao forçar logout:', forceError);
+        console.error('❌ Erro ao forçar logout:', forceError);
       }
       
       return { success: false, error: 'Erro ao fazer logout. Tente novamente.' };
@@ -156,6 +180,8 @@ export const firebaseAuthService = {
   // Atualizar perfil (dados básicos) - com fallback
   async updateUserProfile(uid, data) {
     try {
+      await this.ensureInitialized();
+      
       const currentUser = auth.currentUser;
       if (!currentUser || currentUser.uid !== uid) {
         return { success: false, error: 'Usuário não autenticado' };
@@ -168,7 +194,7 @@ export const firebaseAuthService = {
           updatedAt: new Date().toISOString()
         });
       } catch (firestoreError) {
-        console.warn('Não foi possível atualizar Firestore:', firestoreError.message);
+        console.warn('⚠️ Não foi possível atualizar Firestore:', firestoreError.message);
         // Continuar mesmo se falhar no Firestore
       }
       
@@ -179,7 +205,7 @@ export const firebaseAuthService = {
       
       return { success: true };
     } catch (error) {
-      console.error('Erro ao atualizar perfil:', error);
+      console.error('❌ Erro ao atualizar perfil:', error);
       return { success: false, error: 'Erro ao atualizar perfil. Tente novamente.' };
     }
   },
@@ -187,6 +213,8 @@ export const firebaseAuthService = {
   // Atualizar foto de perfil - com fallback
   async updateProfilePicture(uid, imageUri, fileInfo = {}) {
     try {
+      await this.ensureInitialized();
+      
       const currentUser = auth.currentUser;
       if (!currentUser || currentUser.uid !== uid) {
         return { success: false, error: 'Usuário não autenticado' };
@@ -201,7 +229,7 @@ export const firebaseAuthService = {
         userData = userDoc.exists() ? userDoc.data() : {};
         oldPhotoURL = userData.profilePicture || userData.photoURL;
       } catch (firestoreError) {
-        console.warn('Não foi possível buscar dados atuais:', firestoreError.message);
+        console.warn('⚠️ Não foi possível buscar dados atuais:', firestoreError.message);
         oldPhotoURL = currentUser.photoURL;
       }
 
@@ -229,7 +257,7 @@ export const firebaseAuthService = {
           updatedAt: new Date().toISOString()
         });
       } catch (firestoreError) {
-        console.warn('Não foi possível atualizar foto no Firestore:', firestoreError.message);
+        console.warn('⚠️ Não foi possível atualizar foto no Firestore:', firestoreError.message);
         // Não é crítico, a foto foi atualizada no Auth
       }
 
@@ -244,7 +272,7 @@ export const firebaseAuthService = {
       };
 
     } catch (error) {
-      console.error('Erro ao atualizar foto de perfil:', error);
+      console.error('❌ Erro ao atualizar foto de perfil:', error);
       return { 
         success: false, 
         error: 'Erro ao atualizar foto de perfil. Tente novamente.' 
@@ -255,6 +283,8 @@ export const firebaseAuthService = {
   // Atualizar preferências do usuário - com fallback
   async updateUserPreferences(uid, preferences) {
     try {
+      await this.ensureInitialized();
+      
       const currentUser = auth.currentUser;
       if (!currentUser || currentUser.uid !== uid) {
         return { success: false, error: 'Usuário não autenticado' };
@@ -267,9 +297,9 @@ export const firebaseAuthService = {
           },
           updatedAt: new Date().toISOString()
         });
-        console.log('Preferências atualizadas no Firestore');
+        console.log('✅ Preferências atualizadas no Firestore');
       } catch (firestoreError) {
-        console.warn('Não foi possível atualizar preferências no Firestore:', firestoreError.message);
+        console.warn('⚠️ Não foi possível atualizar preferências no Firestore:', firestoreError.message);
         // Retornar erro específico para preferências
         if (firestoreError.code === 'permission-denied') {
           return { 
@@ -282,132 +312,121 @@ export const firebaseAuthService = {
 
       return { success: true };
     } catch (error) {
-      console.error('Erro ao atualizar preferências:', error);
+      console.error('❌ Erro ao atualizar preferências:', error);
       return { success: false, error: 'Erro ao atualizar preferências' };
     }
   },
 
   // Observar mudanças de autenticação (robusta)
   onAuthStateChanged(callback) {
-    return onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          // Tentar buscar dados adicionais do Firestore
-          let userData = {};
-          
+    return new Promise(async (resolve) => {
+      await this.ensureInitialized();
+      
+      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
           try {
-            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-            userData = userDoc.exists() ? userDoc.data() : {};
-          } catch (firestoreError) {
-            console.warn('Não foi possível enriquecer dados do usuário:', firestoreError.message);
+            // Tentar buscar dados adicionais do Firestore
+            let userData = {};
             
-            // Se for erro de permissão, criar dados padrão
-            if (firestoreError.code === 'permission-denied') {
-              console.warn('Regras de segurança do Firestore precisam ser configuradas');
+            try {
+              const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+              userData = userDoc.exists() ? userDoc.data() : {};
+            } catch (firestoreError) {
+              console.warn('⚠️ Não foi possível enriquecer dados do usuário:', firestoreError.message);
+              
+              // Se for erro de permissão, criar dados padrão
+              if (firestoreError.code === 'permission-denied') {
+                console.warn('⚠️ Regras de segurança do Firestore precisam ser configuradas');
+              }
+              
+              // Usar dados padrão
+              userData = {
+                preferences: {
+                  notifications: true,
+                  autoSync: true,
+                  theme: 'system'
+                }
+              };
             }
             
-            // Usar dados padrão
-            userData = {
+            // Sincronizar photoURL entre Authentication e Firestore
+            const photoURL = firebaseUser.photoURL || userData.profilePicture || userData.photoURL;
+            
+            const enrichedUser = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName || userData.name,
+              photoURL: photoURL,
+              metadata: firebaseUser.metadata,
+              preferences: userData.preferences || {
+                notifications: true,
+                autoSync: true,
+                theme: 'system'
+              },
+              ...userData,
+              // Flag para indicar se dados do Firestore estão disponíveis
+              firestoreAvailable: Object.keys(userData).length > 1
+            };
+            
+            callback(enrichedUser);
+          } catch (error) {
+            console.error('❌ Erro geral ao processar usuário:', error);
+            // Em caso de erro, retornar dados básicos do Firebase Auth
+            callback({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              metadata: firebaseUser.metadata,
               preferences: {
                 notifications: true,
                 autoSync: true,
                 theme: 'system'
-              }
-            };
+              },
+              firestoreAvailable: false
+            });
           }
-          
-          // Sincronizar photoURL entre Authentication e Firestore
-          const photoURL = firebaseUser.photoURL || userData.profilePicture || userData.photoURL;
-          
-          const enrichedUser = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName || userData.name,
-            photoURL: photoURL,
-            metadata: firebaseUser.metadata,
-            preferences: userData.preferences || {
-              notifications: true,
-              autoSync: true,
-              theme: 'system'
-            },
-            ...userData,
-            // Flag para indicar se dados do Firestore estão disponíveis
-            firestoreAvailable: Object.keys(userData).length > 1
-          };
-          
-          callback(enrichedUser);
-        } catch (error) {
-          console.error('Erro geral ao processar usuário:', error);
-          // Em caso de erro, retornar dados básicos do Firebase Auth
-          callback({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            metadata: firebaseUser.metadata,
-            preferences: {
-              notifications: true,
-              autoSync: true,
-              theme: 'system'
-            },
-            firestoreAvailable: false
-          });
+        } else {
+          callback(null);
         }
-      } else {
-        callback(null);
-      }
+      });
+      
+      resolve(unsubscribe);
     });
-  },
-
-  // Obter usuário atual
-  getCurrentUser() {
-    return auth.currentUser;
-  },
-
-  // Verificar se usuário está autenticado
-  isAuthenticated() {
-    return !!auth.currentUser;
   },
 
   // Verificar se Firestore está acessível
   async checkFirestoreAccess(uid) {
     try {
+      await this.ensureInitialized();
+      
       const testDoc = await getDoc(doc(db, 'users', uid));
       return { accessible: true, exists: testDoc.exists() };
     } catch (error) {
-      console.warn('Firestore não acessível:', error.message);
+      console.warn('⚠️ Firestore não acessível:', error.message);
       return { accessible: false, error: error.code };
     }
   },
 
-  // Configurar documento inicial do usuário (caso não exista)
-  async ensureUserDocument(uid, userData = {}) {
+  // Obter usuário atual de forma segura
+  async getCurrentUser() {
     try {
-      const userDoc = await getDoc(doc(db, 'users', uid));
-      
-      if (!userDoc.exists()) {
-        const defaultData = {
-          uid,
-          email: userData.email || auth.currentUser?.email,
-          displayName: userData.name || auth.currentUser?.displayName,
-          createdAt: new Date().toISOString(),
-          preferences: {
-            notifications: true,
-            autoSync: true,
-            theme: 'system'
-          },
-          ...userData
-        };
-        
-        await setDoc(doc(db, 'users', uid), defaultData);
-        console.log('Documento do usuário criado');
-        return { success: true, created: true };
-      }
-      
-      return { success: true, created: false };
+      await this.ensureInitialized();
+      return auth.currentUser;
     } catch (error) {
-      console.warn('Não foi possível garantir documento do usuário:', error.message);
-      return { success: false, error: error.message };
+      console.warn('⚠️ Erro ao obter usuário atual:', error);
+      return null;
+    }
+  },
+
+  // Verificar se usuário está autenticado de forma segura
+  async isAuthenticated() {
+    try {
+      await this.ensureInitialized();
+      return !!auth.currentUser;
+    } catch (error) {
+      console.warn('⚠️ Erro ao verificar autenticação:', error);
+      return false;
     }
   }
 };

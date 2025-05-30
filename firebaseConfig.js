@@ -1,8 +1,8 @@
 // firebaseConfig.js
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getStorage, connectStorageEmulator } from 'firebase/storage';
+import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Your web app's Firebase configuration
@@ -16,50 +16,34 @@ const firebaseConfig = {
   measurementId: "G-RB3Q30ET88"
 };
 
-// Inicializar Firebase
-const app = initializeApp(firebaseConfig);
+// Verificar se o Firebase já foi inicializado
+let app;
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApps()[0];
+}
 
-// Configurar Auth com persistência usando AsyncStorage
+// Configurar Auth com tratamento de erro para Expo Go
 let auth;
 try {
+  // Tentar inicializar auth com AsyncStorage primeiro
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage)
   });
 } catch (error) {
-  // Se já foi inicializado, usar getAuth
+  // Se falhar (já inicializado), usar getAuth
+  console.log('Auth já inicializado, usando getAuth');
   auth = getAuth(app);
 }
 
-// Inicializar Firestore
+// Inicializar Firestore e Storage
 const db = getFirestore(app);
-
-// Inicializar Storage
 const storage = getStorage(app);
 
-// Configurações de desenvolvimento (descomente se necessário)
-// if (__DEV__) {
-//   // Conectar emuladores apenas em desenvolvimento
-//   if (!db._delegate._databaseId?.database?.includes('localhost')) {
-//     connectFirestoreEmulator(db, 'localhost', 8080);
-//   }
-//   if (!storage._location?.host?.includes('localhost')) {
-//     connectStorageEmulator(storage, 'localhost', 9199);
-//   }
-// }
-
-// Configurar timeout e retry para melhor performance
-const authSettings = {
-  appVerificationDisabledForTesting: __DEV__, // Apenas em desenvolvimento
-};
-
-// Aplicar configurações
+// Log de inicialização apenas em desenvolvimento
 if (__DEV__) {
-  auth.settings = authSettings;
-}
-
-// Log de inicialização (apenas em desenvolvimento)
-if (__DEV__) {
-  console.log('Firebase inicializado:', {
+  console.log('✅ Firebase inicializado com sucesso:', {
     auth: !!auth,
     db: !!db,
     storage: !!storage,
@@ -71,35 +55,38 @@ if (__DEV__) {
 export { auth, db, storage };
 export default app;
 
-// Funções utilitárias para debug
+// Função para debug
 export const debugFirebase = () => {
   if (__DEV__) {
     console.log('Estado atual do Firebase:', {
       currentUser: auth.currentUser?.email || 'Nenhum usuário',
       isSignedIn: !!auth.currentUser,
       appName: app.name,
-      authPersistence: 'AsyncStorage'
+      authInitialized: !!auth
     });
   }
 };
 
-// Função para forçar logout (caso necessário)
-export const forceLogout = async () => {
+// Função para verificar se o Firebase está pronto
+export const isFirebaseReady = () => {
   try {
-    if (auth.currentUser) {
-      await auth.signOut();
-    }
-    
-    // Limpar qualquer cache local relacionado à autenticação
-    await AsyncStorage.multiRemove([
-      'firebase:host:moviebox-36a3-default-rtdb.firebaseio.com',
-      'firebase:authUser:' + firebaseConfig.apiKey + ':[DEFAULT]'
-    ]);
-    
-    console.log('Logout forçado realizado com sucesso');
-    return true;
+    return !!(auth && db && storage);
   } catch (error) {
-    console.error('Erro no logout forçado:', error);
+    console.error('Erro ao verificar Firebase:', error);
     return false;
   }
+};
+
+// Função para aguardar inicialização completa
+export const waitForFirebase = () => {
+  return new Promise((resolve) => {
+    const checkReady = () => {
+      if (isFirebaseReady()) {
+        resolve(true);
+      } else {
+        setTimeout(checkReady, 100);
+      }
+    };
+    checkReady();
+  });
 };

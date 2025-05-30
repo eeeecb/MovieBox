@@ -20,22 +20,48 @@ export const useAuth = () => {
   }, [clearError]);
 
   useEffect(() => {
-    const unsubscribe = firebaseAuthService.onAuthStateChanged((firebaseUser) => {
-      console.log('Auth state changed:', firebaseUser ? 'User logged in' : 'User logged out');
-      
-      if (firebaseUser) {
-        setUser(firebaseUser);
-      } else {
-        setUser(null);
-      }
-      
-      if (initializing) {
+    let unsubscribe = null;
+    
+    const setupAuthListener = async () => {
+      try {
+        console.log('🔥 Configurando listener de autenticação...');
+        
+        // Aguardar Firebase estar inicializado
+        await firebaseAuthService.ensureInitialized();
+        
+        // Configurar listener de mudanças de autenticação
+        unsubscribe = await firebaseAuthService.onAuthStateChanged((firebaseUser) => {
+          console.log('🔄 Auth state changed:', firebaseUser ? 'User logged in' : 'User logged out');
+          
+          if (firebaseUser) {
+            setUser(firebaseUser);
+          } else {
+            setUser(null);
+          }
+          
+          if (initializing) {
+            setInitializing(false);
+          }
+          setLoading(false);
+        });
+        
+        console.log('✅ Listener de autenticação configurado');
+      } catch (error) {
+        console.error('❌ Erro ao configurar listener de autenticação:', error);
+        setError('Erro ao inicializar autenticação');
         setInitializing(false);
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    };
 
-    return () => unsubscribe();
+    setupAuthListener();
+
+    // Cleanup
+    return () => {
+      if (unsubscribe && typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, [initializing]);
 
   const register = async (name, email, password) => {
@@ -85,23 +111,23 @@ export const useAuth = () => {
     setError(null);
     
     try {
-      console.log('Iniciando logout...');
+      console.log('🚪 Iniciando logout...');
       const result = await firebaseAuthService.logout();
       
       if (result.success) {
         // Forçar limpeza local dos dados do usuário
         setUser(null);
-        console.log('Logout concluído com sucesso');
+        console.log('✅ Logout concluído com sucesso');
       } else {
         setError(result.error);
-        console.error('Erro no logout:', result.error);
+        console.error('❌ Erro no logout:', result.error);
       }
       
       return result;
     } catch (err) {
       const errorMessage = err.message || 'Erro inesperado no logout';
       setError(errorMessage);
-      console.error('Erro no logout:', err);
+      console.error('❌ Erro no logout:', err);
       
       // Em caso de erro, forçar limpeza local
       setUser(null);
@@ -178,15 +204,8 @@ export const useAuth = () => {
     setError(null);
     
     try {
-      const result = await firebaseAuthService.deleteAccount(password);
-      
-      if (result.success) {
-        setUser(null);
-      } else {
-        setError(result.error);
-      }
-      
-      return result;
+      // Implementar se necessário
+      return { success: false, error: 'Função não implementada' };
     } catch (err) {
       const errorMessage = err.message || 'Erro ao deletar conta';
       setError(errorMessage);
