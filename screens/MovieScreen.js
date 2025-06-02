@@ -1,4 +1,4 @@
-// src/screens/MovieScreen.js
+// src/screens/MovieScreen.js (ATUALIZADO COM SHIMMER)
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
@@ -11,7 +11,8 @@ import {
   TextInput, 
   ActivityIndicator, 
   FlatList,
-  Alert 
+  Alert,
+  RefreshControl
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -22,6 +23,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useFavorites } from '../hooks/useFavorites';
 import { useMovieDetails, useMovieSearch } from '../hooks/useMovies';
 import { tmdbApi } from '../services/tmdbApi';
+import { ShimmerActorCard, ShimmerSearchResult } from '../components/ShimmerComponents';
+import { ShimmerBox, ShimmerLine } from '../components/ShimmerBase';
 
 export default function MovieScreen({ route, navigation }) {
   const { theme, isDark } = useTheme();
@@ -35,6 +38,25 @@ export default function MovieScreen({ route, navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showResults, setShowResults] = useState(false);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Estados de loading específicos
+  const [loadingStates, setLoadingStates] = useState({
+    movie: true,
+    cast: true
+  });
+
+  // Pull-to-refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } catch (error) {
+      console.error('Erro ao atualizar detalhes do filme:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
   
   // Hooks para dados do filme e pesquisa
   const { movie, cast, loading, error, refetch } = useMovieDetails(paramMovieId);
@@ -44,6 +66,14 @@ export default function MovieScreen({ route, navigation }) {
     searchMovies, 
     clearSearch 
   } = useMovieSearch();
+
+  // Atualizar estados de loading baseado nos dados
+  useEffect(() => {
+    setLoadingStates({
+      movie: !movie && loading,
+      cast: cast.length === 0 && loading
+    });
+  }, [movie, cast, loading]);
 
   // Efeito para pesquisar enquanto digita (com debounce)
   useEffect(() => {
@@ -119,6 +149,65 @@ export default function MovieScreen({ route, navigation }) {
     return date.toLocaleDateString('pt-BR');
   };
 
+  // NOVO: Shimmer para detalhes do filme
+  const renderMovieDetailsShimmer = () => (
+    <View style={[styles.movieCard, { backgroundColor: theme.colors.card }]}>
+      <View style={styles.posterContainer}>
+        {/* Poster shimmer */}
+        <ShimmerBox 
+          width="100%" 
+          height={220} 
+          borderRadius={10}
+          duration={1800}
+        />
+      </View>
+      
+      <View style={styles.movieDetails}>
+        {/* Título */}
+        <ShimmerLine 
+          width="90%" 
+          height={24} 
+          duration={1600}
+          style={{ marginBottom: 8 }}
+        />
+        
+        {/* Sinopse */}
+        {Array.from({ length: 4 }).map((_, index) => (
+          <ShimmerLine
+            key={index}
+            width={index === 3 ? "70%" : "100%"}
+            height={16}
+            duration={1500 + (index * 100)}
+            style={{ marginBottom: 6 }}
+          />
+        ))}
+        
+        {/* Stats container */}
+        <View style={[styles.movieStats, { 
+          backgroundColor: isDark ? '#2A2A2A' : '#f9f9f9',
+          marginTop: 16 
+        }]}>
+          {Array.from({ length: 4 }).map((_, index) => (
+            <ShimmerLine
+              key={index}
+              width="80%"
+              height={16}
+              duration={1600 + (index * 150)}
+              style={{ marginBottom: 8 }}
+            />
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+
+  // NOVO: Shimmer para lista de elenco
+  const renderCastShimmer = (count = 6) => (
+    Array.from({ length: count }).map((_, index) => (
+      <ShimmerActorCard key={`cast-shimmer-${index}`} />
+    ))
+  );
+
   // Renderizar um item nos resultados da pesquisa
   const renderSearchResult = ({ item }) => (
     <TouchableOpacity 
@@ -149,6 +238,13 @@ export default function MovieScreen({ route, navigation }) {
         </View>
       </View>
     </TouchableOpacity>
+  );
+
+  // NOVO: Shimmer para resultados de pesquisa
+  const renderSearchShimmer = (count = 4) => (
+    Array.from({ length: count }).map((_, index) => (
+      <ShimmerSearchResult key={`search-shimmer-${index}`} />
+    ))
   );
   
   return (
@@ -213,12 +309,14 @@ export default function MovieScreen({ route, navigation }) {
           }
         ]}>
           {searching ? (
-            <View style={styles.searchingContainer}>
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-              <Text style={[styles.searchingText, { color: theme.colors.secondaryText }]}>
-                Pesquisando...
-              </Text>
-            </View>
+            <ScrollView style={styles.searchResultsList}>
+              <View style={styles.searchingContainer}>
+                <Text style={[styles.searchingText, { color: theme.colors.text }]}>
+                  Pesquisando "{searchQuery}"...
+                </Text>
+              </View>
+              {renderSearchShimmer()}
+            </ScrollView>
           ) : searchResults.length > 0 ? (
             <FlatList
               data={searchResults}
@@ -237,14 +335,7 @@ export default function MovieScreen({ route, navigation }) {
 
       {/* Conteúdo principal */}
       {!showResults && (
-        loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>
-              Carregando dados do filme...
-            </Text>
-          </View>
-        ) : error ? (
+        error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity 
@@ -254,74 +345,94 @@ export default function MovieScreen({ route, navigation }) {
               <Text style={styles.retryButtonText}>Tentar novamente</Text>
             </TouchableOpacity>
           </View>
-        ) : movie ? (
-          <ScrollView style={styles.scrollView}>
-            <View style={[styles.movieCard, { backgroundColor: theme.colors.card }]}>
-              <View style={styles.posterContainer}>
-                {movie.poster_path ? (
-                  <Image
-                    source={{ uri: tmdbApi.getImageUrl(movie.poster_path, 'w500') }}
-                    style={styles.movieImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={[styles.movieImage, styles.noImageContainer]}>
-                    <Text style={styles.noImageText}>Sem imagem disponível</Text>
+        ) : (
+          <ScrollView 
+            style={styles.scrollView}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[theme.colors.primary]} // Android
+                tintColor={theme.colors.primary} // iOS
+                title="Atualizando filme..." // iOS
+                titleColor={theme.colors.text} // iOS
+                progressBackgroundColor={theme.colors.card} // Android
+              />
+            }
+          >
+            {/* Detalhes do filme */}
+            {loadingStates.movie ? (
+              renderMovieDetailsShimmer()
+            ) : movie ? (
+              <View style={[styles.movieCard, { backgroundColor: theme.colors.card }]}>
+                <View style={styles.posterContainer}>
+                  {movie.poster_path ? (
+                    <Image
+                      source={{ uri: tmdbApi.getImageUrl(movie.poster_path, 'w500') }}
+                      style={styles.movieImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={[styles.movieImage, styles.noImageContainer]}>
+                      <Text style={styles.noImageText}>Sem imagem disponível</Text>
+                    </View>
+                  )}
+                  
+                  {/* Botão de favorito */}
+                  {user && (
+                    <TouchableOpacity 
+                      style={[styles.favoriteButton, isTogglingFavorite && styles.favoriteButtonDisabled]}
+                      onPress={handleToggleFavorite}
+                      disabled={isTogglingFavorite}
+                    >
+                      {isTogglingFavorite ? (
+                        <ActivityIndicator size="small" color="white" />
+                      ) : (
+                        <Ionicons 
+                          name={isFavorite(movie.id) ? "heart" : "heart-outline"} 
+                          size={28} 
+                          color={isFavorite(movie.id) ? "#F44336" : "white"} 
+                        />
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+                
+                <View style={styles.movieDetails}>
+                  <Text style={[styles.movieTitle, { color: theme.colors.text }]}>
+                    {movie.title}
+                  </Text>
+                  <Text style={[styles.movieSynopsis, { color: theme.colors.text }]}>
+                    {movie.overview || 'Sinopse não disponível.'}
+                  </Text>
+                  
+                  <View style={[styles.movieStats, { 
+                    backgroundColor: isDark ? '#2A2A2A' : '#f9f9f9' 
+                  }]}>
+                    <Text style={[styles.movieStat, { color: theme.colors.text }]}>
+                      Orçamento: {movie.budget ? formatCurrency(movie.budget) : 'Não informado'}
+                    </Text>
+                    <Text style={[styles.movieStat, { color: theme.colors.text }]}>
+                      Avaliação: {movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}
+                    </Text>
+                    <Text style={[styles.movieStat, { color: theme.colors.text }]}>
+                      Duração: {movie.runtime ? `${movie.runtime} min` : 'Não informado'}
+                    </Text>
+                    <Text style={[styles.movieStat, { color: theme.colors.text }]}>
+                      Lançamento: {formatDate(movie.release_date)}
+                    </Text>
                   </View>
-                )}
-                
-                {/* Botão de favorito */}
-                {user && (
-                  <TouchableOpacity 
-                    style={[styles.favoriteButton, isTogglingFavorite && styles.favoriteButtonDisabled]}
-                    onPress={handleToggleFavorite}
-                    disabled={isTogglingFavorite}
-                  >
-                    {isTogglingFavorite ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : (
-                      <Ionicons 
-                        name={isFavorite(movie.id) ? "heart" : "heart-outline"} 
-                        size={28} 
-                        color={isFavorite(movie.id) ? "#F44336" : "white"} 
-                      />
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
-              
-              <View style={styles.movieDetails}>
-                <Text style={[styles.movieTitle, { color: theme.colors.text }]}>
-                  {movie.title}
-                </Text>
-                <Text style={[styles.movieSynopsis, { color: theme.colors.text }]}>
-                  {movie.overview || 'Sinopse não disponível.'}
-                </Text>
-                
-                <View style={[styles.movieStats, { 
-                  backgroundColor: isDark ? '#2A2A2A' : '#f9f9f9' 
-                }]}>
-                  <Text style={[styles.movieStat, { color: theme.colors.text }]}>
-                    Orçamento: {movie.budget ? formatCurrency(movie.budget) : 'Não informado'}
-                  </Text>
-                  <Text style={[styles.movieStat, { color: theme.colors.text }]}>
-                    Avaliação: {movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A'}
-                  </Text>
-                  <Text style={[styles.movieStat, { color: theme.colors.text }]}>
-                    Duração: {movie.runtime ? `${movie.runtime} min` : 'Não informado'}
-                  </Text>
-                  <Text style={[styles.movieStat, { color: theme.colors.text }]}>
-                    Lançamento: {formatDate(movie.release_date)}
-                  </Text>
                 </View>
               </View>
-            </View>
+            ) : null}
             
             {/* Seção de atores */}
             <View style={styles.actorsSection}>
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Elenco</Text>
               
-              {cast.length > 0 ? (
+              {loadingStates.cast ? (
+                renderCastShimmer()
+              ) : cast.length > 0 ? (
                 cast.map((person, index) => (
                   <TouchableOpacity 
                     key={index} 
@@ -360,10 +471,6 @@ export default function MovieScreen({ route, navigation }) {
               )}
             </View>
           </ScrollView>
-        ) : (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>Nenhum filme encontrado</Text>
-          </View>
         )
       )}
     </SafeAreaView>
@@ -476,13 +583,10 @@ const styles = StyleSheet.create({
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
   searchingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     padding: 16,
+    alignItems: 'center',
   },
   searchingText: {
-    marginLeft: 8,
     fontSize: 14,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
@@ -492,16 +596,6 @@ const styles = StyleSheet.create({
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
   // Estados de loading e erro
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontFamily: 'EncodeSansExpanded_400Regular',
-  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',

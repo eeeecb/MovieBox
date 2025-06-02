@@ -1,4 +1,4 @@
-// src/screens/FavoritesScreen.js
+// src/screens/FavoritesScreen.js (ATUALIZADO COM SHIMMER)
 import React, { useState } from 'react';
 import { 
   StyleSheet, 
@@ -8,7 +8,8 @@ import {
   Image, 
   TouchableOpacity, 
   SafeAreaView, 
-  ActivityIndicator
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -19,6 +20,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useFavorites } from '../hooks/useFavorites';
 import { tmdbApi } from '../services/tmdbApi';
 import { showConfirmAlert, showErrorAlert } from '../utils/crossPlatformAlert';
+import { ShimmerFavoriteItem } from '../components/ShimmerComponents';
 
 export default function FavoritesScreen({ navigation }) {
   const { theme, isDark } = useTheme();
@@ -26,6 +28,22 @@ export default function FavoritesScreen({ navigation }) {
   const { favorites, loading, removeFavorite } = useFavorites(user?.uid);
   
   const [removingId, setRemovingId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Pull-to-refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Simula recarregamento dos favoritos
+      // O hook useFavorites já atualiza automaticamente via onSnapshot
+      // mas podemos dar feedback visual ao usuário
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      console.error('Erro ao atualizar favoritos:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
   
   // Função para remover um favorito - CORRIGIDA
   const handleRemoveFavorite = async (movieId, movieTitle) => {
@@ -120,6 +138,15 @@ export default function FavoritesScreen({ navigation }) {
       </View>
     </TouchableOpacity>
   );
+
+  // NOVO: Renderizar shimmer para favoritos
+  const renderFavoritesShimmer = (count = 5) => (
+    Array.from({ length: count }).map((_, index) => (
+      <View key={`favorite-shimmer-${index}`} style={styles.shimmerContainer}>
+        <ShimmerFavoriteItem />
+      </View>
+    ))
+  );
   
   // Função para renderizar o header da lista
   const renderHeader = () => (
@@ -129,6 +156,18 @@ export default function FavoritesScreen({ navigation }) {
       </Text>
       <Text style={[styles.listSubtitle, { color: theme.colors.secondaryText }]}>
         {favorites.length} {favorites.length === 1 ? 'filme' : 'filmes'} salvos
+      </Text>
+    </View>
+  );
+
+  // NOVO: Header com shimmer para loading
+  const renderLoadingHeader = () => (
+    <View style={styles.listHeader}>
+      <Text style={[styles.listTitle, { color: theme.colors.text }]}>
+        Carregando favoritos...
+      </Text>
+      <Text style={[styles.listSubtitle, { color: theme.colors.secondaryText }]}>
+        Aguarde um momento
       </Text>
     </View>
   );
@@ -168,16 +207,6 @@ export default function FavoritesScreen({ navigation }) {
     </View>
   );
   
-  // Função para renderizar estado de loading
-  const renderLoading = () => (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color={theme.colors.primary} />
-      <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>
-        Carregando favoritos...
-      </Text>
-    </View>
-  );
-  
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
@@ -200,7 +229,13 @@ export default function FavoritesScreen({ navigation }) {
       {!isAuthenticated ? (
         renderNotAuthenticated()
       ) : loading ? (
-        renderLoading()
+        // ATUALIZADO: Shimmer durante loading
+        <View style={styles.loadingContainer}>
+          {renderLoadingHeader()}
+          <View style={styles.shimmerList}>
+            {renderFavoritesShimmer()}
+          </View>
+        </View>
       ) : (
         <FlatList
           data={favorites}
@@ -214,6 +249,17 @@ export default function FavoritesScreen({ navigation }) {
           ListEmptyComponent={renderEmptyList}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.colors.primary]} // Android
+              tintColor={theme.colors.primary} // iOS
+              title="Atualizando favoritos..." // iOS
+              titleColor={theme.colors.text} // iOS
+              progressBackgroundColor={theme.colors.card} // Android
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -236,6 +282,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     fontFamily: 'Nunito_400Regular',
+  },
+  // NOVO: Estilos para shimmer loading
+  loadingContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  shimmerList: {
+    flex: 1,
+    paddingTop: 10,
+  },
+  shimmerContainer: {
+    marginBottom: 12,
   },
   listContainer: {
     padding: 16,
@@ -334,7 +392,7 @@ const styles = StyleSheet.create({
   separator: {
     height: 12,
   },
-  // Estados vazios e loading
+  // Estados vazios
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -364,15 +422,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     fontFamily: 'EncodeSansExpanded_500Medium',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    fontFamily: 'EncodeSansExpanded_400Regular',
   },
 });

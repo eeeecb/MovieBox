@@ -1,4 +1,4 @@
-// src/screens/HomeScreen.js
+// src/screens/HomeScreen.js (ATUALIZADO COM SHIMMER)
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -12,6 +12,7 @@ import {
   ScrollView,
   TextInput,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -20,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useMovies, useMovieSearch } from '../hooks/useMovies';
 import { tmdbApi } from '../services/tmdbApi';
+import { ShimmerMovieCard, ShimmerSearchResult } from '../components/ShimmerComponents';
 
 export default function HomeScreen({ navigation }) {
   const { theme, isDark } = useTheme();
@@ -41,6 +43,19 @@ export default function HomeScreen({ navigation }) {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showResults, setShowResults] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Pull-to-refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshMovies();
+    } catch (error) {
+      console.error('Erro ao atualizar filmes:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Debounce da pesquisa
   useEffect(() => {
@@ -106,6 +121,20 @@ export default function HomeScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  // NOVO: Renderizar shimmer para lista de filmes
+  const renderShimmerMovies = (count = 5) => (
+    <FlatList
+      data={Array.from({ length: count })}
+      renderItem={({ index }) => (
+        <ShimmerMovieCard key={`shimmer-${index}`} />
+      )}
+      keyExtractor={(_, index) => `shimmer-${index}`}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.movieList}
+    />
+  );
+
   const renderSearchResult = ({ item }) => (
     <TouchableOpacity 
       style={[styles.searchResultItem, { 
@@ -140,10 +169,19 @@ export default function HomeScreen({ navigation }) {
     </TouchableOpacity>
   );
 
-  const renderMovieSection = (title, data) => (
+  // NOVO: Renderizar shimmer para resultados de pesquisa
+  const renderShimmerSearchResults = (count = 6) => (
+    Array.from({ length: count }).map((_, index) => (
+      <ShimmerSearchResult key={`search-shimmer-${index}`} />
+    ))
+  );
+
+  const renderMovieSection = (title, data, isLoading = false) => (
     <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{title}</Text>
-      {data.length > 0 ? (
+      {isLoading ? (
+        renderShimmerMovies()
+      ) : data.length > 0 ? (
         <FlatList
           data={data}
           renderItem={renderMovieItem}
@@ -210,12 +248,14 @@ export default function HomeScreen({ navigation }) {
         // Search Results
         <View style={{ flex: 1 }}>
           {searching ? (
-            <View style={styles.searchingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text style={[styles.searchingText, { color: theme.colors.secondaryText }]}>
-                Pesquisando...
-              </Text>
-            </View>
+            <ScrollView style={styles.searchResultsContainer}>
+              <View style={styles.searchHeaderContainer}>
+                <Text style={[styles.searchResultsTitle, { color: theme.colors.text }]}>
+                  Pesquisando "{searchQuery}"...
+                </Text>
+              </View>
+              {renderShimmerSearchResults()}
+            </ScrollView>
           ) : searchResults.length > 0 ? (
             <FlatList
               data={searchResults}
@@ -241,14 +281,7 @@ export default function HomeScreen({ navigation }) {
         </View>
       ) : (
         // Main Content
-        loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>
-              Carregando filmes...
-            </Text>
-          </View>
-        ) : error ? (
+        error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity 
@@ -259,10 +292,23 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         ) : (
-          <ScrollView style={styles.scrollView}>
-            {renderMovieSection('Em Cartaz', nowPlayingMovies)}
-            {renderMovieSection('Populares', popularMovies)}
-            {renderMovieSection('Mais Bem Avaliados', topRatedMovies)}
+          <ScrollView 
+            style={styles.scrollView}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[theme.colors.primary]} // Android
+                tintColor={theme.colors.primary} // iOS
+                title="Atualizando filmes..." // iOS
+                titleColor={theme.colors.text} // iOS
+                progressBackgroundColor={theme.colors.card} // Android
+              />
+            }
+          >
+            {renderMovieSection('Em Cartaz', nowPlayingMovies, loading)}
+            {renderMovieSection('Populares', popularMovies, loading)}
+            {renderMovieSection('Mais Bem Avaliados', topRatedMovies, loading)}
           </ScrollView>
         )
       )}
@@ -382,16 +428,6 @@ const styles = StyleSheet.create({
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
   // Loading states
-  searchingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchingText: {
-    marginTop: 16,
-    fontSize: 16,
-    fontFamily: 'EncodeSansExpanded_400Regular',
-  },
   noResultsContainer: {
     flex: 1,
     alignItems: 'center',
@@ -402,16 +438,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginVertical: 20,
-    fontFamily: 'EncodeSansExpanded_400Regular',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
     fontFamily: 'EncodeSansExpanded_400Regular',
   },
   errorContainer: {

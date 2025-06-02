@@ -1,4 +1,4 @@
-// src/screens/ActorScreen.js
+// src/screens/ActorScreen.js (ATUALIZADO COM SHIMMER)
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
@@ -8,7 +8,8 @@ import {
   ScrollView, 
   SafeAreaView, 
   TouchableOpacity, 
-  ActivityIndicator 
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -16,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../contexts/ThemeContext';
 import { tmdbApi } from '../services/tmdbApi';
+import { ShimmerActorProfile, ShimmerMovieItem } from '../components/ShimmerComponents';
 
 // Hook personalizado para dados do ator - MELHORADO
 const useActorDetails = (actorId) => {
@@ -27,6 +29,13 @@ const useActorDetails = (actorId) => {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Estados de loading específicos
+  const [loadingStates, setLoadingStates] = useState({
+    actor: true,
+    filmography: true
+  });
 
   useEffect(() => {
     if (!actorId) {
@@ -34,42 +43,46 @@ const useActorDetails = (actorId) => {
       return;
     }
 
-    const fetchActorData = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const [actorResult, moviesResult] = await Promise.all([
-          tmdbApi.getActorDetails(actorId),
-          tmdbApi.getActorMovies(actorId)
-        ]);
-
-        if (actorResult.success) {
-          setActorDetails(actorResult.data);
-        } else {
-          setError(actorResult.error);
-        }
-
-        if (moviesResult.success) {
-          // Ordenar por data de lançamento (mais recentes primeiro)
-          const sortedMovies = moviesResult.data
-            .sort((a, b) => new Date(b.release_date || '1900') - new Date(a.release_date || '1900'));
-          
-          setAllMovies(sortedMovies);
-          // Mostrar os primeiros filmes
-          setDisplayedMovies(sortedMovies.slice(0, moviesPerPage));
-          setCurrentPage(1);
-        }
-      } catch (err) {
-        setError('Erro ao buscar dados do ator');
-        console.error('Error fetching actor data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchActorData();
   }, [actorId, moviesPerPage]);
+
+  const fetchActorData = async () => {
+    setLoading(true);
+    setError(null);
+    setLoadingStates({ actor: true, filmography: true });
+
+    try {
+      const [actorResult, moviesResult] = await Promise.all([
+        tmdbApi.getActorDetails(actorId),
+        tmdbApi.getActorMovies(actorId)
+      ]);
+
+      if (actorResult.success) {
+        setActorDetails(actorResult.data);
+        setLoadingStates(prev => ({ ...prev, actor: false }));
+      } else {
+        setError(actorResult.error);
+      }
+
+      if (moviesResult.success) {
+        // Ordenar por data de lançamento (mais recentes primeiro)
+        const sortedMovies = moviesResult.data
+          .sort((a, b) => new Date(b.release_date || '1900') - new Date(a.release_date || '1900'));
+        
+        setAllMovies(sortedMovies);
+        // Mostrar os primeiros filmes
+        setDisplayedMovies(sortedMovies.slice(0, moviesPerPage));
+        setCurrentPage(1);
+        setLoadingStates(prev => ({ ...prev, filmography: false }));
+      }
+    } catch (err) {
+      setError('Erro ao buscar dados do ator');
+      console.error('Error fetching actor data:', err);
+      setLoadingStates({ actor: false, filmography: false });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Função para carregar mais filmes
   const loadMoreMovies = () => {
@@ -93,13 +106,25 @@ const useActorDetails = (actorId) => {
   // Verificar se há mais filmes para carregar
   const hasMoreMovies = displayedMovies.length < allMovies.length;
 
-  const refetch = () => {
+  const refetch = async () => {
     if (actorId) {
       // Reset estados e buscar novamente
       setCurrentPage(1);
       setDisplayedMovies([]);
       setAllMovies([]);
-      fetchActorData();
+      setLoadingStates({ actor: true, filmography: true });
+      await fetchActorData();
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } catch (error) {
+      console.error('Erro ao atualizar perfil do ator:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -110,10 +135,13 @@ const useActorDetails = (actorId) => {
     displayedCount: displayedMovies.length,
     loading,
     loadingMore,
+    loadingStates,
+    refreshing,
     error,
     hasMoreMovies,
     loadMoreMovies,
-    refetch
+    refetch,
+    onRefresh
   };
 };
 
@@ -130,11 +158,14 @@ export default function ActorScreen({ route, navigation }) {
     allMoviesCount,
     displayedCount, 
     loading,
-    loadingMore, 
+    loadingMore,
+    loadingStates,
+    refreshing,
     error,
     hasMoreMovies,
     loadMoreMovies,
-    refetch 
+    refetch,
+    onRefresh 
   } = useActorDetails(actorId);
 
   // Função para formatar data
@@ -197,6 +228,13 @@ export default function ActorScreen({ route, navigation }) {
     </TouchableOpacity>
   );
 
+  // NOVO: Renderizar shimmer para filmografia
+  const renderFilmographyShimmer = (count = 5) => (
+    Array.from({ length: count }).map((_, index) => (
+      <ShimmerMovieItem key={`filmography-shimmer-${index}`} />
+    ))
+  );
+
   // Renderizar botão "Carregar mais filmes"
   const renderLoadMoreButton = () => {
     if (!hasMoreMovies) return null;
@@ -246,14 +284,7 @@ export default function ActorScreen({ route, navigation }) {
       </View>
       
       {/* Conteúdo */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.secondaryText }]}>
-            Carregando perfil do ator...
-          </Text>
-        </View>
-      ) : error ? (
+      {error ? (
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity 
@@ -263,73 +294,90 @@ export default function ActorScreen({ route, navigation }) {
             <Text style={styles.retryButtonText}>Tentar novamente</Text>
           </TouchableOpacity>
         </View>
-      ) : actorDetails ? (
-        <ScrollView style={styles.scrollView}>
+      ) : (
+        <ScrollView 
+          style={styles.scrollView}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.colors.primary]} // Android
+              tintColor={theme.colors.primary} // iOS
+              title="Atualizando perfil..." // iOS
+              titleColor={theme.colors.text} // iOS
+              progressBackgroundColor={theme.colors.card} // Android
+            />
+          }
+        >
           {/* Card do ator */}
-          <View style={[styles.actorCard, { backgroundColor: theme.colors.card }]}>
-            <View style={styles.actorHeader}>
-              {actorDetails.profile_path ? (
-                <Image 
-                  source={{ uri: tmdbApi.getImageUrl(actorDetails.profile_path, 'w300') }} 
-                  style={styles.actorProfileImage} 
-                />
-              ) : (
-                <View style={styles.noActorImage}>
-                  <Text style={styles.noActorImageText}>
-                    {actorDetails.name?.substring(0, 1)}
+          {loadingStates.actor ? (
+            <ShimmerActorProfile />
+          ) : actorDetails ? (
+            <View style={[styles.actorCard, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.actorHeader}>
+                {actorDetails.profile_path ? (
+                  <Image 
+                    source={{ uri: tmdbApi.getImageUrl(actorDetails.profile_path, 'w300') }} 
+                    style={styles.actorProfileImage} 
+                  />
+                ) : (
+                  <View style={styles.noActorImage}>
+                    <Text style={styles.noActorImageText}>
+                      {actorDetails.name?.substring(0, 1)}
+                    </Text>
+                  </View>
+                )}
+                
+                <View style={styles.actorHeaderInfo}>
+                  <Text style={[styles.actorProfileName, { color: theme.colors.text }]}>
+                    {actorDetails.name}
+                  </Text>
+                  <Text style={[styles.actorPopularity, { color: theme.colors.secondaryText }]}>
+                    Popularidade: {actorDetails.popularity?.toFixed(1)}
                   </Text>
                 </View>
-              )}
-              
-              <View style={styles.actorHeaderInfo}>
-                <Text style={[styles.actorProfileName, { color: theme.colors.text }]}>
-                  {actorDetails.name}
-                </Text>
-                <Text style={[styles.actorPopularity, { color: theme.colors.secondaryText }]}>
-                  Popularidade: {actorDetails.popularity?.toFixed(1)}
-                </Text>
               </View>
-            </View>
-            
-            {/* Biografia */}
-            <View style={styles.actorBio}>
-              <Text style={[styles.actorBioText, { color: theme.colors.text }]}>
-                {getActorDescription()}
-              </Text>
-            </View>
-            
-            {/* Detalhes do ator */}
-            <View style={[styles.actorDetails, { 
-              backgroundColor: isDark ? '#2A2A2A' : '#f9f9f9' 
-            }]}>
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.text }]}>
-                  Sexo:
-                </Text>
-                <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-                  {actorDetails.gender === 1 ? 'Feminino' : 'Masculino'}
+              
+              {/* Biografia */}
+              <View style={styles.actorBio}>
+                <Text style={[styles.actorBioText, { color: theme.colors.text }]}>
+                  {getActorDescription()}
                 </Text>
               </View>
               
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.text }]}>
-                  Data de Nascimento:
-                </Text>
-                <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-                  {formatDate(actorDetails.birthday)}
-                </Text>
-              </View>
-              
-              <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: theme.colors.text }]}>
-                  Local de Nascimento:
-                </Text>
-                <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-                  {actorDetails.place_of_birth || 'Não informado'}
-                </Text>
+              {/* Detalhes do ator */}
+              <View style={[styles.actorDetails, { 
+                backgroundColor: isDark ? '#2A2A2A' : '#f9f9f9' 
+              }]}>
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: theme.colors.text }]}>
+                    Sexo:
+                  </Text>
+                  <Text style={[styles.detailValue, { color: theme.colors.text }]}>
+                    {actorDetails.gender === 1 ? 'Feminino' : 'Masculino'}
+                  </Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: theme.colors.text }]}>
+                    Data de Nascimento:
+                  </Text>
+                  <Text style={[styles.detailValue, { color: theme.colors.text }]}>
+                    {formatDate(actorDetails.birthday)}
+                  </Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: theme.colors.text }]}>
+                    Local de Nascimento:
+                  </Text>
+                  <Text style={[styles.detailValue, { color: theme.colors.text }]}>
+                    {actorDetails.place_of_birth || 'Não informado'}
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
+          ) : null}
           
           {/* Seção de filmografia */}
           <View style={styles.filmographySection}>
@@ -337,14 +385,16 @@ export default function ActorScreen({ route, navigation }) {
               <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
                 Filmes
               </Text>
-              {allMoviesCount > 0 && (
+              {!loadingStates.filmography && allMoviesCount > 0 && (
                 <Text style={[styles.movieCount, { color: theme.colors.secondaryText }]}>
                   Mostrando {displayedCount} de {allMoviesCount}
                 </Text>
               )}
             </View>
             
-            {actorFilmography.length > 0 ? (
+            {loadingStates.filmography ? (
+              renderFilmographyShimmer()
+            ) : actorFilmography.length > 0 ? (
               <>
                 {actorFilmography.map(movie => renderFilmographyItem(movie))}
                 {renderLoadMoreButton()}
@@ -356,10 +406,6 @@ export default function ActorScreen({ route, navigation }) {
             )}
           </View>
         </ScrollView>
-      ) : (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Nenhuma informação do ator encontrada</Text>
-        </View>
       )}
     </SafeAreaView>
   );
@@ -381,16 +427,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     fontFamily: 'Nunito_400Regular',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontFamily: 'EncodeSansExpanded_400Regular',
   },
   errorContainer: {
     flex: 1,
