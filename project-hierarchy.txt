@@ -32,7 +32,6 @@ MovieBox
 │  └─ SettingsScreen.js
 ├─ services
 │  ├─ firebaseAuth.js
-│  ├─ firebaseStorage.js
 │  ├─ firestoreService.js
 │  └─ tmdbApi.js
 └─ utils
