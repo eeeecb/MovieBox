@@ -1,4 +1,4 @@
-// src/screens/ProfileScreen.js
+// src/screens/ProfileScreen.js - VERSÃO LIMPA
 import React, { useState } from "react";
 import {
   View,
@@ -10,6 +10,7 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,7 +20,9 @@ import Constants from "expo-constants";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
 import { useFavorites } from "../hooks/useFavorites";
-import { showErrorAlert, showSuccessAlert } from '../utils/crossPlatformAlert';
+import { showErrorAlert, showSuccessAlert, showImageSourceAlert } from '../utils/crossPlatformAlert';
+import { base64ImageService } from '../services/base64ImageService';
+import { debugLog, errorLog, successLog } from '../config/debugConfig';
 
 export default function ProfileScreen({ navigation }) {
   const { theme, isDark } = useTheme();
@@ -44,7 +47,7 @@ export default function ProfileScreen({ navigation }) {
 
       if (result.success) {
         setIsEditing(false);
-        showErrorAlert("Sucesso", "Perfil atualizado com sucesso");
+        showSuccessAlert("Sucesso", "Perfil atualizado com sucesso");
       } else {
         showErrorAlert("Erro", result.error || "Erro ao atualizar perfil");
       }
@@ -60,49 +63,85 @@ export default function ProfileScreen({ navigation }) {
     setIsEditing(false);
   };
 
-const pickImage = async () => {
+  const processAndUploadImage = async (imageUri, asset) => {
     try {
+      debugLog('PROFILE', 'Iniciando processamento de imagem');
+      
+      // Validar imagem para base64
+      const validation = base64ImageService.validateImageForBase64(asset);
+      if (!validation.isValid) {
+        showErrorAlert('Imagem Inválida', validation.error);
+        return false;
+      }
+
+      // Processar para base64
+      const base64Result = await base64ImageService.processImageToBase64(imageUri);
+      
+      if (!base64Result.success) {
+        showErrorAlert('Erro no Processamento', base64Result.error);
+        return false;
+      }
+
+      // Upload usando o sistema de auth
+      const fileInfo = {
+        fileSize: asset.fileSize,
+        width: asset.width,
+        height: asset.height,
+        mimeType: asset.mimeType
+      };
+
+      const uploadResult = await updateProfilePicture(imageUri, fileInfo);
+      
+      if (uploadResult.success) {
+        successLog('PROFILE', 'Upload concluído com sucesso');
+        showSuccessAlert('Sucesso!', 'Foto de perfil atualizada com sucesso');
+        return true;
+      } else {
+        showErrorAlert('Erro no Upload', uploadResult.error);
+        return false;
+      }
+
+    } catch (error) {
+      errorLog('PROFILE', 'Erro no processamento:', error);
+      showErrorAlert('Erro', `Erro ao processar imagem: ${error.message}`);
+      return false;
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      debugLog('PROFILE', 'Solicitando permissão para galeria...');
+      
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (status !== 'granted') {
-        showErrorAlert('Permissão negada', 'Precisamos de permissão para acessar suas fotos');
+        showErrorAlert('Permissão Negada', 'Precisamos de permissão para acessar suas fotos');
         return;
       }
       
       setIsUploadingImage(true);
+      debugLog('PROFILE', 'Abrindo galeria...');
       
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.9,
         allowsMultipleSelection: false,
       });
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        const imageUri = asset.uri;
+        debugLog('PROFILE', 'Imagem selecionada da galeria');
         
-        // Validações de segurança
-        const fileInfo = {
-          fileSize: asset.fileSize,
-          width: asset.width,
-          height: asset.height,
-          mimeType: asset.mimeType
-        };
-        
-        // Fazer upload da imagem usando o serviço atualizado
-        const updateResult = await updateProfilePicture(imageUri, fileInfo);
-        
-        if (updateResult.success) {
-          showErrorAlert('Sucesso', 'Foto de perfil atualizada com sucesso!');
-        } else {
-          showErrorAlert('Erro', updateResult.error || 'Erro ao atualizar foto');
-        }
+        await processAndUploadImage(asset.uri, asset);
+      } else {
+        debugLog('PROFILE', 'Seleção de imagem cancelada');
       }
+      
     } catch (error) {
-      showErrorAlert('Erro', 'Erro ao selecionar imagem: ' + error.message);
-      console.error('Erro no pickImage:', error);
+      errorLog('PROFILE', 'Erro no pickImage:', error);
+      showErrorAlert('Erro', `Erro ao selecionar imagem: ${error.message}`);
     } finally {
       setIsUploadingImage(false);
     }
@@ -110,66 +149,121 @@ const pickImage = async () => {
 
   const takePhoto = async () => {
     try {
+      debugLog('PROFILE', 'Solicitando permissão para câmera...');
+      
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       
       if (status !== 'granted') {
-        showErrorAlert('Permissão negada', 'Precisamos de permissão para usar a câmera');
+        showErrorAlert('Permissão Negada', 'Precisamos de permissão para usar a câmera');
         return;
       }
       
       setIsUploadingImage(true);
+      debugLog('PROFILE', 'Abrindo câmera...');
       
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.9,
       });
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
-        const imageUri = asset.uri;
+        debugLog('PROFILE', 'Foto capturada pela câmera');
         
-        const fileInfo = {
-          fileSize: asset.fileSize,
-          width: asset.width,
-          height: asset.height,
-          mimeType: asset.mimeType
-        };
-        
-        const updateResult = await updateProfilePicture(imageUri, fileInfo);
-        
-        if (updateResult.success) {
-          showErrorAlert('Sucesso', 'Foto de perfil atualizada com sucesso!');
-        } else {
-          showErrorAlert('Erro', updateResult.error || 'Erro ao atualizar foto');
-        }
+        await processAndUploadImage(asset.uri, asset);
       }
+      
     } catch (error) {
-      showErrorAlert('Erro', 'Erro ao tirar foto: ' + error.message);
-      console.error('Erro no takePhoto:', error);
+      errorLog('PROFILE', 'Erro no takePhoto:', error);
+      showErrorAlert('Erro', `Erro ao tirar foto: ${error.message}`);
     } finally {
       setIsUploadingImage(false);
     }
   };
 
-  const showImagePickerOptions = () => {
-    showErrorAlert(
-      'Alterar Foto de Perfil',
-      'Escolha uma opção:',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel'
-        },
-        {
-          text: 'Escolher da Galeria',
-          onPress: pickImage
-        },
-        {
-          text: 'Tirar Foto',
-          onPress: takePhoto
+  const pickImageFromComputer = async () => {
+    try {
+      debugLog('PROFILE', 'Iniciando seleção via computador/web...');
+      
+      if (Platform.OS !== 'web') {
+        showErrorAlert('Erro', 'Esta opção está disponível apenas na versão web');
+        return;
+      }
+
+      setIsUploadingImage(true);
+
+      // Criar input file para web
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/jpeg,image/jpg,image/png,image/webp';
+      
+      input.onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) {
+          debugLog('PROFILE', 'Nenhum arquivo selecionado');
+          setIsUploadingImage(false);
+          return;
         }
-      ]
+
+        debugLog('PROFILE', 'Arquivo selecionado via computador:', {
+          name: file.name,
+          size: Math.round(file.size / 1024) + 'KB',
+          type: file.type
+        });
+
+        try {
+          // Converter file para data URL
+          const reader = new FileReader();
+          reader.onload = async (e) => {
+            const imageUri = e.target.result;
+            
+            // Simular asset do ImagePicker para compatibilidade
+            const asset = {
+              uri: imageUri,
+              width: 0, // Será determinado no processamento
+              height: 0,
+              fileSize: file.size,
+              mimeType: file.type,
+              fileName: file.name
+            };
+
+            await processAndUploadImage(imageUri, asset);
+          };
+          
+          reader.onerror = () => {
+            showErrorAlert('Erro', 'Erro ao ler arquivo selecionado');
+            setIsUploadingImage(false);
+          };
+          
+          reader.readAsDataURL(file);
+        } catch (error) {
+          errorLog('PROFILE', 'Erro ao processar arquivo:', error);
+          showErrorAlert('Erro', `Erro ao processar arquivo: ${error.message}`);
+          setIsUploadingImage(false);
+        }
+      };
+
+      input.oncancel = () => {
+        debugLog('PROFILE', 'Seleção cancelada');
+        setIsUploadingImage(false);
+      };
+
+      // Trigger file picker
+      input.click();
+      
+    } catch (error) {
+      errorLog('PROFILE', 'Erro no pickImageFromComputer:', error);
+      showErrorAlert('Erro', `Erro ao abrir seletor: ${error.message}`);
+      setIsUploadingImage(false);
+    }
+  };
+
+  const showImagePickerOptions = () => {
+    showImageSourceAlert(
+      () => pickImageFromComputer(), // Computador (web)
+      () => takePhoto(),             // Câmera
+      () => pickImage()              // Galeria
     );
   };
 
@@ -231,10 +325,13 @@ const pickImage = async () => {
         >
           {/* Avatar Section */}
           <View style={styles.avatarSection}>
-            <TouchableOpacity onPress={pickImage} disabled={isUploadingImage}>
+            <TouchableOpacity onPress={showImagePickerOptions} disabled={isUploadingImage}>
               {isUploadingImage ? (
                 <View style={styles.avatarContainer}>
-                  <ActivityIndicator color={theme.colors.primary} />
+                  <ActivityIndicator color={theme.colors.primary} size="large" />
+                  <Text style={[styles.uploadingText, { color: theme.colors.primary }]}>
+                    Processando...
+                  </Text>
                 </View>
               ) : user?.photoURL ? (
                 <Image source={{ uri: user.photoURL }} style={styles.avatar} />
@@ -253,9 +350,11 @@ const pickImage = async () => {
                 </View>
               )}
 
-              <View style={styles.cameraIcon}>
-                <Ionicons name="camera" size={16} color="white" />
-              </View>
+              {!isUploadingImage && (
+                <View style={styles.cameraIcon}>
+                  <Ionicons name="camera" size={16} color="white" />
+                </View>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -484,6 +583,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  uploadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: "bold",
+  },
   userInfoSection: {
     alignItems: "center",
   },
@@ -551,14 +655,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: "bold",
     marginTop: 8,
     marginBottom: 4,
     fontFamily: "Nunito_400Regular",
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
+    textAlign: "center",
     fontFamily: "EncodeSansExpanded_400Regular",
   },
   actionsCard: {
