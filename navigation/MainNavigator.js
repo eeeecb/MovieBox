@@ -1,4 +1,3 @@
-// navigation/MainNavigator.js
 import React from 'react';
 import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
@@ -7,7 +6,6 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
-// Importar telas
 import HomeScreen from '../screens/HomeScreen';
 import MovieScreen from '../screens/MovieScreen';
 import ActorScreen from '../screens/ActorScreen';
@@ -16,19 +14,18 @@ import SettingsScreen from '../screens/SettingsScreen';
 import LoginScreen from '../screens/LoginScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
-// Importar contextos/hooks
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
-
-// Importar componente do Drawer customizado
 import CustomDrawerContent from '../components/CustomDrawerContent';
 
 const Drawer = createDrawerNavigator();
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Componente de Loading para autenticação
-function AuthLoadingScreen() {
+const STACK_SCREEN_OPTIONS = { headerShown: false };
+const DRAWER_WIDTH = 280;
+
+const AuthLoadingScreen = () => {
   const { theme } = useTheme();
   
   return (
@@ -39,49 +36,41 @@ function AuthLoadingScreen() {
       </Text>
     </View>
   );
-}
+};
 
-// Stack de navegação para filmes
-function MoviesStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Home" component={HomeScreen} />
-      <Stack.Screen name="MovieDetails" component={MovieScreen} />
-      <Stack.Screen name="ActorProfile" component={ActorScreen} />
-    </Stack.Navigator>
-  );
-}
+const createMovieStack = (initialScreen, name) => (
+  <Stack.Navigator screenOptions={STACK_SCREEN_OPTIONS}>
+    <Stack.Screen name={name} component={initialScreen} />
+    <Stack.Screen name="MovieDetails" component={MovieScreen} />
+    <Stack.Screen name="ActorProfile" component={ActorScreen} />
+  </Stack.Navigator>
+);
 
-// Stack de navegação para favoritos
-function FavoritesStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="FavoritesList" component={FavoritesScreen} />
-      <Stack.Screen name="MovieDetails" component={MovieScreen} />
-      <Stack.Screen name="ActorProfile" component={ActorScreen} />
-    </Stack.Navigator>
-  );
-}
+const MoviesStack = () => createMovieStack(HomeScreen, "Home");
+const FavoritesStack = () => createMovieStack(FavoritesScreen, "FavoritesList");
 
-// Navegação por tabs (principal)
-function TabNavigator() {
+const getTabIcon = (route, focused) => {
+  const icons = {
+    MoviesTab: focused ? 'film' : 'film-outline',
+    Favorites: focused ? 'heart' : 'heart-outline'
+  };
+  return icons[route.name];
+};
+
+const TabNavigator = () => {
   const { theme } = useTheme();
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-
-          if (route.name === 'MoviesTab') {
-            iconName = focused ? 'film' : 'film-outline';
-          } else if (route.name === 'Favorites') {
-            iconName = focused ? 'heart' : 'heart-outline';
-          }
-
-          return <Ionicons name={iconName} size={size} color={color} />;
-        },
+        tabBarIcon: ({ focused, color, size }) => (
+          <Ionicons 
+            name={getTabIcon(route, focused)} 
+            size={size} 
+            color={color} 
+          />
+        ),
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.tabBarInactive,
         tabBarStyle: { 
@@ -105,11 +94,30 @@ function TabNavigator() {
       />
     </Tab.Navigator>
   );
-}
+};
 
-// Drawer Navigator (quando usuário está autenticado)
-function DrawerNavigator() {
+const createDrawerScreen = (name, component, label, iconName) => (
+  <Drawer.Screen 
+    key={name}
+    name={name} 
+    component={component}
+    options={{
+      drawerLabel: label,
+      drawerIcon: ({ color, size }) => (
+        <Ionicons name={iconName} size={size} color={color} />
+      ),
+    }}
+  />
+);
+
+const DrawerNavigator = () => {
   const { theme } = useTheme();
+
+  const drawerScreens = [
+    { name: 'Main', component: TabNavigator, label: 'Início', icon: 'home-outline' },
+    { name: 'Profile', component: ProfileScreen, label: 'Perfil', icon: 'person-outline' },
+    { name: 'Settings', component: SettingsScreen, label: 'Configurações', icon: 'settings-outline' }
+  ];
 
   return (
     <Drawer.Navigator
@@ -118,7 +126,7 @@ function DrawerNavigator() {
         headerShown: false,
         drawerStyle: {
           backgroundColor: theme.colors.card,
-          width: 280,
+          width: DRAWER_WIDTH,
         },
         drawerActiveTintColor: theme.colors.primary,
         drawerInactiveTintColor: theme.colors.text,
@@ -133,90 +141,51 @@ function DrawerNavigator() {
         },
       }}
     >
-      <Drawer.Screen 
-        name="Main" 
-        component={TabNavigator}
-        options={{
-          drawerLabel: 'Início',
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen 
-        name="Profile" 
-        component={ProfileScreen}
-        options={{
-          drawerLabel: 'Perfil',
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen 
-        name="Settings" 
-        component={SettingsScreen}
-        options={{
-          drawerLabel: 'Configurações',
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
-        }}
-      />
+      {drawerScreens.map(screen => 
+        createDrawerScreen(screen.name, screen.component, screen.label, screen.icon)
+      )}
     </Drawer.Navigator>
   );
-}
+};
 
-// Stack Navigator principal
-function MainStack() {
+const MainStack = () => {
   const { isAuthenticated, loading, isInitializing } = useAuth();
 
-  // Mostrar loading enquanto inicializa ou está carregando
   if (isInitializing || loading) {
     return <AuthLoadingScreen />;
   }
 
+  const screenConfig = isAuthenticated 
+    ? { name: "DrawerNav", component: DrawerNavigator, animation: 'push' }
+    : { name: "Login", component: LoginScreen, animation: 'pop' };
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {isAuthenticated ? (
-        // Usuário autenticado
-        <Stack.Screen 
-          name="DrawerNav" 
-          component={DrawerNavigator}
-          options={{
-            animationTypeForReplace: 'push',
-          }}
-        />
-      ) : (
-        // Usuário não autenticado
-        <Stack.Screen 
-          name="Login" 
-          component={LoginScreen}
-          options={{
-            animationTypeForReplace: 'pop',
-          }}
-        />
-      )}
+    <Stack.Navigator screenOptions={STACK_SCREEN_OPTIONS}>
+      <Stack.Screen 
+        name={screenConfig.name} 
+        component={screenConfig.component}
+        options={{ animationTypeForReplace: screenConfig.animation }}
+      />
     </Stack.Navigator>
   );
-}
+};
 
-// Componente principal do navegador
+const createNavigationTheme = (theme, isDark) => ({
+  ...(isDark ? DarkTheme : DefaultTheme),
+  colors: {
+    ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
+    primary: theme.colors.primary,
+    background: theme.colors.background,
+    card: theme.colors.card,
+    text: theme.colors.text,
+    border: theme.colors.border,
+    notification: theme.colors.accent,
+  },
+});
+
 export default function MainNavigator() {
   const { theme, isDark } = useTheme();
-
-  const navigationTheme = {
-    ...(isDark ? DarkTheme : DefaultTheme),
-    colors: {
-      ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
-      primary: theme.colors.primary,
-      background: theme.colors.background,
-      card: theme.colors.card,
-      text: theme.colors.text,
-      border: theme.colors.border,
-      notification: theme.colors.accent,
-    },
-  };
+  const navigationTheme = createNavigationTheme(theme, isDark);
 
   return (
     <NavigationContainer theme={navigationTheme}>

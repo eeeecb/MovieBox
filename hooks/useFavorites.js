@@ -1,4 +1,3 @@
-// hooks/useFavorites.js
 import { useState, useEffect } from 'react';
 import { firestoreService } from '../services/firestoreService';
 
@@ -7,7 +6,6 @@ export const useFavorites = (userId) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Carregar favoritos quando o componente monta ou userId muda
   useEffect(() => {
     if (!userId) {
       setFavorites([]);
@@ -38,7 +36,6 @@ export const useFavorites = (userId) => {
 
     loadFavorites();
 
-    // Configurar listener em tempo real
     const unsubscribe = firestoreService.onFavoritesChanged(userId, (updatedFavorites) => {
       setFavorites(updatedFavorites);
     });
@@ -46,15 +43,13 @@ export const useFavorites = (userId) => {
     return () => unsubscribe();
   }, [userId]);
 
-  const addFavorite = async (movie) => {
+  const handleFavoriteAction = async (action, ...args) => {
     if (!userId) return { success: false, error: 'Usuário não autenticado' };
     
     try {
-      const result = await firestoreService.addFavorite(userId, movie);
+      const result = await action(userId, ...args);
       
-      if (result.success) {
-        // O listener em tempo real atualizará automaticamente o estado
-      } else {
+      if (!result.success) {
         setError(result.error);
       }
       
@@ -65,33 +60,20 @@ export const useFavorites = (userId) => {
     }
   };
 
+  const addFavorite = async (movie) => {
+    return handleFavoriteAction(firestoreService.addFavorite, movie);
+  };
+
   const removeFavorite = async (movieId) => {
-    if (!userId) return { success: false, error: 'Usuário não autenticado' };
-    
-    try {
-      const result = await firestoreService.removeFavorite(userId, movieId);
-      
-      if (result.success) {
-        // O listener em tempo real atualizará automaticamente o estado
-      } else {
-        setError(result.error);
-      }
-      
-      return result;
-    } catch (err) {
-      setError(err.message);
-      return { success: false, error: err.message };
-    }
+    return handleFavoriteAction(firestoreService.removeFavorite, movieId);
   };
 
   const toggleFavorite = async (movie) => {
     const isCurrentlyFavorite = favorites.some(fav => fav.id === movie.id);
     
-    if (isCurrentlyFavorite) {
-      return await removeFavorite(movie.id);
-    } else {
-      return await addFavorite(movie);
-    }
+    return isCurrentlyFavorite 
+      ? await removeFavorite(movie.id)
+      : await addFavorite(movie);
   };
 
   const isFavorite = (movieId) => {

@@ -1,4 +1,3 @@
-// src/components/CustomDrawerContent.js
 import React, { useState } from 'react';
 import {
   View,
@@ -16,121 +15,82 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { debugLog, errorLog, successLog } from '../config/debugConfig';
 import { showLogoutConfirm, showErrorAlert } from '../utils/crossPlatformAlert';
 
+const UserAvatar = ({ user, styles }) => {
+  if (user?.photoURL) {
+    return <Image source={{ uri: user.photoURL }} style={styles.avatar} />;
+  }
+  
+  return (
+    <View style={styles.avatarPlaceholder}>
+      <Text style={styles.avatarText}>
+        {user?.displayName?.charAt(0)?.toUpperCase() || 
+         user?.email?.charAt(0)?.toUpperCase() || 'U'}
+      </Text>
+    </View>
+  );
+};
+
+const MenuItem = ({ item, theme, onPress, isLoggingOut }) => {
+  const getIconColor = () => {
+    if (item.isLogout) return theme.colors.error;
+    return item.isActive ? theme.colors.primary : theme.colors.text;
+  };
+
+  const getLabelColor = () => getIconColor();
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.menuItem,
+        item.isActive && [styles.activeMenuItem, { backgroundColor: `${theme.colors.primary}20` }],
+        item.isLogout && styles.logoutMenuItem,
+        item.disabled && styles.disabledMenuItem
+      ]}
+      onPress={onPress}
+      activeOpacity={0.7}
+      disabled={item.disabled}
+    >
+      <View style={styles.menuItemContent}>
+        {item.disabled ? (
+          <ActivityIndicator 
+            size="small" 
+            color={theme.colors.error} 
+            style={{ width: 24 }}
+          />
+        ) : (
+          <Ionicons 
+            name={item.icon} 
+            size={24} 
+            color={getIconColor()} 
+          />
+        )}
+        <Text style={[styles.menuItemLabel, { color: getLabelColor() }]}>
+          {item.label}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 export default function CustomDrawerContent(props) {
   const { theme } = useTheme();
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
-  
-  // Estado para controlar o loading do logout
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleLogout = () => {
-    debugLog('DRAWER', 'Botão de logout pressionado');
-    debugLog('DRAWER', 'Usuário atual:', {
-      email: user?.email,
-      displayName: user?.displayName,
-      uid: user?.uid
+  const logDebugInfo = (message, data = {}) => {
+    debugLog('DRAWER', message, {
+      timestamp: new Date().toISOString(),
+      ...data
     });
-    
-    // Usar função cross-platform para o alert de confirmação
-    showLogoutConfirm(
-      // Função onConfirm (quando usuário confirma o logout)
-      async () => {
-        debugLog('DRAWER', '==========================================');
-        debugLog('DRAWER', '🚀 INICIANDO PROCESSO DE LOGOUT');
-        debugLog('DRAWER', '==========================================');
-        debugLog('DRAWER', 'Timestamp:', new Date().toISOString());
-        debugLog('DRAWER', 'Estado antes do logout:', {
-          isLoggingOut: isLoggingOut,
-          hasUser: !!user,
-          userEmail: user?.email
-        });
-        
-        setIsLoggingOut(true);
-        debugLog('DRAWER', 'Estado de loading ativado');
-
-        try {
-          debugLog('DRAWER', '📞 Chamando função de logout do hook...');
-          debugLog('DRAWER', 'Hook de logout disponível:', typeof logout === 'function');
-          
-          const startTime = Date.now();
-          const result = await logout();
-          const endTime = Date.now();
-          
-          debugLog('DRAWER', `⏱️ Tempo de execução do logout: ${endTime - startTime}ms`);
-          debugLog('DRAWER', '📋 Resultado completo do logout:', {
-            success: result?.success,
-            error: result?.error,
-            timestamp: new Date().toISOString()
-          });
-          
-          if (result?.success) {
-            successLog('DRAWER', 'LOGOUT BEM-SUCEDIDO!');
-            debugLog('DRAWER', '🎯 Usuário deve ser redirecionado automaticamente');
-            debugLog('DRAWER', '🧹 Limpeza de estado local realizada');
-            
-            // Não mostrar alert de sucesso, pois o usuário será redirecionado
-          } else {
-            errorLog('DRAWER', 'FALHA NO LOGOUT');
-            debugLog('DRAWER', '🚨 Erro reportado:', result?.error);
-            debugLog('DRAWER', '📱 Exibindo alert de erro para o usuário');
-            
-            showErrorAlert(
-              'Erro no Logout',
-              result?.error || 'Erro ao fazer logout. Tente novamente.',
-              () => {
-                debugLog('DRAWER', 'Alert de erro fechado pelo usuário');
-              }
-            );
-          }
-        } catch (error) {
-          errorLog('DRAWER', '💥 EXCEÇÃO CAPTURADA NO LOGOUT', {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
-            timestamp: new Date().toISOString()
-          });
-          
-          showErrorAlert(
-            'Erro Inesperado',
-            `Erro inesperado ao fazer logout: ${error.message}`,
-            () => {
-              debugLog('DRAWER', 'Alert de exceção fechado pelo usuário');
-            }
-          );
-        } finally {
-          debugLog('DRAWER', '🏁 FINALIZANDO PROCESSO DE LOGOUT');
-          debugLog('DRAWER', '⏰ Timestamp final:', new Date().toISOString());
-          debugLog('DRAWER', '🔄 Desativando estado de loading...');
-          
-          setIsLoggingOut(false);
-          
-          debugLog('DRAWER', '✨ Estado de loading desativado');
-          debugLog('DRAWER', '==========================================');
-          debugLog('DRAWER', '📊 PROCESSO DE LOGOUT CONCLUÍDO');
-          debugLog('DRAWER', '==========================================');
-          
-          // Timeout para limpar logs do estado após alguns segundos
-          setTimeout(() => {
-            debugLog('DRAWER', '🧹 Limpeza de logs de estado após 3 segundos');
-          }, 3000);
-        }
-      },
-      // Função onCancel (quando usuário cancela o logout)
-      () => {
-        debugLog('DRAWER', 'Logout cancelado pelo usuário');
-      }
-    );
   };
 
   const navigateTo = (screenName) => {
-    debugLog('DRAWER', 'Tentativa de navegação:', {
+    logDebugInfo('Tentativa de navegação:', {
       destino: screenName,
-      isLoggingOut: isLoggingOut,
-      timestamp: new Date().toISOString()
+      isLoggingOut: isLoggingOut
     });
     
-    // Não navegar se estiver fazendo logout
     if (isLoggingOut) {
       debugLog('DRAWER', '⚠️ Navegação bloqueada - logout em andamento');
       return;
@@ -141,33 +101,105 @@ export default function CustomDrawerContent(props) {
     debugLog('DRAWER', '🚀 Comando de navegação executado');
   };
 
-  const menuItems = [
-    {
-      label: 'Início',
-      icon: 'home-outline',
-      onPress: () => navigateTo('Main'),
-      isActive: props.state.routeNames[props.state.index] === 'Main'
-    },
-    {
-      label: 'Perfil',
-      icon: 'person-outline',
-      onPress: () => navigateTo('Profile'),
-      isActive: props.state.routeNames[props.state.index] === 'Profile'
-    },
-    {
-      label: 'Configurações',
-      icon: 'settings-outline',
-      onPress: () => navigateTo('Settings'),
-      isActive: props.state.routeNames[props.state.index] === 'Settings'
-    },
-    {
-      label: isLoggingOut ? 'Saindo...' : 'Sair',
-      icon: 'log-out-outline',
-      onPress: handleLogout,
-      isActive: false,
-      isLogout: true,
-      disabled: isLoggingOut
+  const executeLogout = async () => {
+    debugLog('DRAWER', '==========================================');
+    debugLog('DRAWER', '🚀 INICIANDO PROCESSO DE LOGOUT');
+    debugLog('DRAWER', '==========================================');
+    
+    logDebugInfo('Estado antes do logout:', {
+      isLoggingOut: isLoggingOut,
+      hasUser: !!user,
+      userEmail: user?.email
+    });
+    
+    setIsLoggingOut(true);
+    debugLog('DRAWER', 'Estado de loading ativado');
+
+    try {
+      debugLog('DRAWER', '📞 Chamando função de logout do hook...');
+      debugLog('DRAWER', 'Hook de logout disponível:', typeof logout === 'function');
+      
+      const startTime = Date.now();
+      const result = await logout();
+      const endTime = Date.now();
+      
+      logDebugInfo(`⏱️ Tempo de execução do logout: ${endTime - startTime}ms`, {
+        success: result?.success,
+        error: result?.error
+      });
+      
+      if (result?.success) {
+        successLog('DRAWER', 'LOGOUT BEM-SUCEDIDO!');
+        debugLog('DRAWER', '🎯 Usuário deve ser redirecionado automaticamente');
+        debugLog('DRAWER', '🧹 Limpeza de estado local realizada');
+      } else {
+        errorLog('DRAWER', 'FALHA NO LOGOUT');
+        debugLog('DRAWER', '🚨 Erro reportado:', result?.error);
+        debugLog('DRAWER', '📱 Exibindo alert de erro para o usuário');
+        
+        showErrorAlert(
+          'Erro no Logout',
+          result?.error || 'Erro ao fazer logout. Tente novamente.',
+          () => debugLog('DRAWER', 'Alert de erro fechado pelo usuário')
+        );
+      }
+    } catch (error) {
+      errorLog('DRAWER', '💥 EXCEÇÃO CAPTURADA NO LOGOUT', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+      
+      showErrorAlert(
+        'Erro Inesperado',
+        `Erro inesperado ao fazer logout: ${error.message}`,
+        () => debugLog('DRAWER', 'Alert de exceção fechado pelo usuário')
+      );
+    } finally {
+      debugLog('DRAWER', '🏁 FINALIZANDO PROCESSO DE LOGOUT');
+      logDebugInfo('Desativando estado de loading...');
+      
+      setIsLoggingOut(false);
+      
+      debugLog('DRAWER', '✨ Estado de loading desativado');
+      debugLog('DRAWER', '==========================================');
+      debugLog('DRAWER', '📊 PROCESSO DE LOGOUT CONCLUÍDO');
+      debugLog('DRAWER', '==========================================');
+      
+      setTimeout(() => {
+        debugLog('DRAWER', '🧹 Limpeza de logs de estado após 3 segundos');
+      }, 3000);
     }
+  };
+
+  const handleLogout = () => {
+    logDebugInfo('Botão de logout pressionado', {
+      email: user?.email,
+      displayName: user?.displayName,
+      uid: user?.uid
+    });
+    
+    showLogoutConfirm(
+      executeLogout,
+      () => debugLog('DRAWER', 'Logout cancelado pelo usuário')
+    );
+  };
+
+  const createMenuItem = (label, icon, screenName, isLogout = false) => ({
+    label: isLoggingOut && isLogout ? 'Saindo...' : label,
+    icon,
+    onPress: isLogout ? handleLogout : () => navigateTo(screenName),
+    isActive: !isLogout && props.state.routeNames[props.state.index] === screenName,
+    isLogout,
+    disabled: isLoggingOut && isLogout
+  });
+
+  const menuItems = [
+    createMenuItem('Início', 'home-outline', 'Main'),
+    createMenuItem('Perfil', 'person-outline', 'Profile'),
+    createMenuItem('Configurações', 'settings-outline', 'Settings'),
+    createMenuItem('Sair', 'log-out-outline', null, true)
   ];
 
   return (
@@ -175,25 +207,13 @@ export default function CustomDrawerContent(props) {
       backgroundColor: theme.colors.card,
       paddingTop: insets.top 
     }]}>
-      {/* Header do Drawer com informações do usuário */}
       <View style={[styles.userInfoSection, { backgroundColor: theme.colors.primary }]}>
         <TouchableOpacity 
           style={styles.userInfo}
           onPress={() => navigateTo('Profile')}
           disabled={isLoggingOut}
         >
-          {user?.photoURL ? (
-            <Image 
-              source={{ uri: user.photoURL || user.profilePicture }} 
-              style={styles.avatar} 
-            />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>
-                {user?.displayName?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
-              </Text>
-            </View>
-          )}
+          <UserAvatar user={user} styles={styles} />
           
           <View style={styles.userDetails}>
             <Text style={styles.userName}>
@@ -206,7 +226,6 @@ export default function CustomDrawerContent(props) {
         </TouchableOpacity>
       </View>
 
-      {/* ScrollView para os itens do menu */}
       <ScrollView 
         style={styles.menuScrollView}
         showsVerticalScrollIndicator={false}
@@ -214,57 +233,17 @@ export default function CustomDrawerContent(props) {
       >
         <View style={styles.menuSection}>
           {menuItems.map((item, index) => (
-            <TouchableOpacity
+            <MenuItem
               key={index}
-              style={[
-                styles.menuItem,
-                item.isActive && [styles.activeMenuItem, { backgroundColor: `${theme.colors.primary}20` }],
-                item.isLogout && styles.logoutMenuItem,
-                item.disabled && styles.disabledMenuItem
-              ]}
+              item={item}
+              theme={theme}
               onPress={item.onPress}
-              activeOpacity={0.7}
-              disabled={item.disabled}
-            >
-              <View style={styles.menuItemContent}>
-                {item.disabled ? (
-                  <ActivityIndicator 
-                    size="small" 
-                    color={theme.colors.error} 
-                    style={{ width: 24 }}
-                  />
-                ) : (
-                  <Ionicons 
-                    name={item.icon} 
-                    size={24} 
-                    color={
-                      item.isLogout 
-                        ? theme.colors.error 
-                        : item.isActive 
-                          ? theme.colors.primary 
-                          : theme.colors.text
-                    } 
-                  />
-                )}
-                <Text style={[
-                  styles.menuItemLabel,
-                  { 
-                    color: item.isLogout 
-                      ? theme.colors.error 
-                      : item.isActive 
-                        ? theme.colors.primary 
-                        : theme.colors.text
-                  }
-                ]}>
-                  {item.label}
-                </Text>
-              </View>
-            </TouchableOpacity>
+              isLoggingOut={isLoggingOut}
+            />
           ))}
         </View>
       </ScrollView>
 
-      {/* Footer do Drawer */}
       <View style={[styles.bottomDrawerSection, { borderTopColor: theme.colors.border }]}>
         <Text style={[styles.appVersion, { color: theme.colors.secondaryText }]}>
           MovieBox v1.0.0

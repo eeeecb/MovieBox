@@ -1,11 +1,9 @@
-// src/contexts/ThemeContext.js
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../hooks/useAuth';
 import { debugLog, errorLog, successLog, warnLog } from '../config/debugConfig';
 
-// Definição dos temas
 export const lightTheme = {
   name: 'light',
   colors: {
@@ -48,16 +46,54 @@ export const darkTheme = {
   }
 };
 
-// Criar o contexto
 const ThemeContext = createContext();
 
-// Hook personalizado para usar o tema
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (!context) {
     throw new Error('useTheme deve ser usado dentro de um ThemeProvider');
   }
   return context;
+};
+
+const getStorageData = async (keys) => {
+  try {
+    const values = await Promise.all(keys.map(key => AsyncStorage.getItem(key)));
+    return keys.reduce((acc, key, index) => {
+      acc[key] = values[index];
+      return acc;
+    }, {});
+  } catch (error) {
+    errorLog('THEME', 'Erro ao carregar dados do storage:', error);
+    return {};
+  }
+};
+
+const saveThemeToStorage = async (preferences) => {
+  try {
+    debugLog('THEME', 'Salvando preferências de tema:', preferences);
+    
+    const { theme: themeValue, useSystem, lastManual } = preferences;
+    const savePromises = [];
+    
+    if (themeValue !== undefined) {
+      savePromises.push(AsyncStorage.setItem('@theme_preference', themeValue));
+    }
+    if (useSystem !== undefined) {
+      savePromises.push(AsyncStorage.setItem('@use_system_theme', JSON.stringify(useSystem)));
+    }
+    if (lastManual !== undefined) {
+      savePromises.push(AsyncStorage.setItem('@last_manual_theme', lastManual));
+    }
+    
+    await Promise.all(savePromises);
+    debugLog('THEME', 'Preferências salvas no AsyncStorage');
+    
+    return true;
+  } catch (error) {
+    errorLog('THEME', 'Erro ao salvar preferências de tema:', error);
+    return false;
+  }
 };
 
 export const ThemeProvider = ({ children }) => {
@@ -69,43 +105,35 @@ export const ThemeProvider = ({ children }) => {
   const [useSystemTheme, setUseSystemTheme] = useState(true);
   const [lastManualTheme, setLastManualTheme] = useState('light');
 
-  // Carregar preferências de tema
   useEffect(() => {
     const loadThemePreference = async () => {
       try {
         debugLog('THEME', 'Carregando preferências de tema...');
         
-        // Sempre carregar do AsyncStorage primeiro (para compatibilidade)
-        const [storedTheme, storedUseSystem, storedLastManual] = await Promise.all([
-          AsyncStorage.getItem('@theme_preference'),
-          AsyncStorage.getItem('@use_system_theme'),
-          AsyncStorage.getItem('@last_manual_theme')
-        ]);
+        const storageKeys = ['@theme_preference', '@use_system_theme', '@last_manual_theme'];
+        const storageData = await getStorageData(storageKeys);
 
-        // Configurar valores padrão
         let themeToUse = 'light';
         let useSystemToUse = true;
         let lastManualToUse = 'light';
 
-        // Se há dados do AsyncStorage, usar
-        if (storedLastManual) {
-          lastManualToUse = storedLastManual;
-          setLastManualTheme(storedLastManual);
+        if (storageData['@last_manual_theme']) {
+          lastManualToUse = storageData['@last_manual_theme'];
+          setLastManualTheme(lastManualToUse);
           debugLog('THEME', 'Último tema manual carregado do AsyncStorage:', lastManualToUse);
         }
 
-        if (storedUseSystem !== null) {
-          useSystemToUse = JSON.parse(storedUseSystem);
+        if (storageData['@use_system_theme'] !== null) {
+          useSystemToUse = JSON.parse(storageData['@use_system_theme']);
           setUseSystemTheme(useSystemToUse);
           debugLog('THEME', 'Configuração useSystem carregada do AsyncStorage:', useSystemToUse);
         }
 
-        if (storedTheme && !useSystemToUse) {
-          themeToUse = storedTheme;
+        if (storageData['@theme_preference'] && !useSystemToUse) {
+          themeToUse = storageData['@theme_preference'];
           debugLog('THEME', 'Tema específico carregado do AsyncStorage:', themeToUse);
         }
 
-        // Se usuário logado e Firestore disponível, tentar usar preferências da nuvem
         if (isAuthenticated && user?.preferences && user?.firestoreAvailable !== false) {
           try {
             const { theme: cloudTheme, useSystem: cloudUseSystem, lastManual: cloudLastManual } = user.preferences;
@@ -129,24 +157,18 @@ export const ThemeProvider = ({ children }) => {
             successLog('THEME', 'Preferências da nuvem aplicadas com sucesso');
           } catch (error) {
             warnLog('THEME', 'Erro ao carregar preferências da nuvem: ' + error.message);
-            // Continuar com dados locais
           }
         }
 
-        // Aplicar tema
-        if (useSystemToUse) {
-          const newTheme = systemColorScheme === 'dark' ? darkTheme : lightTheme;
-          setTheme(newTheme);
-          debugLog('THEME', 'Tema do sistema aplicado:', newTheme.name);
-        } else {
-          const newTheme = themeToUse === 'dark' ? darkTheme : lightTheme;
-          setTheme(newTheme);
-          debugLog('THEME', 'Tema manual aplicado:', newTheme.name);
-        }
+        const newTheme = useSystemToUse 
+          ? (systemColorScheme === 'dark' ? darkTheme : lightTheme)
+          : (themeToUse === 'dark' ? darkTheme : lightTheme);
+        
+        setTheme(newTheme);
+        debugLog('THEME', 'Tema aplicado:', newTheme.name);
 
       } catch (error) {
         errorLog('THEME', 'Erro ao carregar preferência de tema:', error);
-        // Usar padrões em caso de erro
         const fallbackTheme = systemColorScheme === 'dark' ? darkTheme : lightTheme;
         setTheme(fallbackTheme);
         debugLog('THEME', 'Tema fallback aplicado:', fallbackTheme.name);
@@ -159,7 +181,6 @@ export const ThemeProvider = ({ children }) => {
     loadThemePreference();
   }, [systemColorScheme, isAuthenticated, user]);
 
-  // Atualizar tema com base no sistema quando useSystemTheme é true
   useEffect(() => {
     if (useSystemTheme && systemColorScheme) {
       const newTheme = systemColorScheme === 'dark' ? darkTheme : lightTheme;
@@ -168,63 +189,42 @@ export const ThemeProvider = ({ children }) => {
     }
   }, [systemColorScheme, useSystemTheme]);
 
-  // Salvar preferências (com fallback robusto)
   const saveThemePreferences = async (preferences) => {
-    try {
-      debugLog('THEME', 'Salvando preferências de tema:', preferences);
-      
-      // Sempre salvar no AsyncStorage primeiro (garantia)
-      const { theme: themeValue, useSystem, lastManual } = preferences;
-      
-      const savePromises = [];
-      
-      if (themeValue !== undefined) {
-        savePromises.push(AsyncStorage.setItem('@theme_preference', themeValue));
-      }
-      if (useSystem !== undefined) {
-        savePromises.push(AsyncStorage.setItem('@use_system_theme', JSON.stringify(useSystem)));
-      }
-      if (lastManual !== undefined) {
-        savePromises.push(AsyncStorage.setItem('@last_manual_theme', lastManual));
-      }
-      
-      await Promise.all(savePromises);
-      debugLog('THEME', 'Preferências salvas no AsyncStorage');
-      
-      // Tentar salvar no Firebase se disponível
-      if (isAuthenticated && updatePreferences && user?.firestoreAvailable !== false) {
-        try {
-          await updatePreferences({
-            ...user.preferences,
-            ...preferences
-          });
-          successLog('THEME', 'Preferências de tema salvas na nuvem');
-        } catch (firebaseError) {
-          warnLog('THEME', 'Não foi possível salvar no Firebase: ' + firebaseError.message);
-          
-          // Se for erro de permissão, mostrar aviso discreto
-          if (firebaseError.message?.includes('permission')) {
-            warnLog('THEME', 'Configure as regras do Firestore para sincronizar preferências');
-          }
-          
-          // Continuar - dados foram salvos localmente
+    await saveThemeToStorage(preferences);
+    
+    if (isAuthenticated && updatePreferences && user?.firestoreAvailable !== false) {
+      try {
+        await updatePreferences({
+          ...user.preferences,
+          ...preferences
+        });
+        successLog('THEME', 'Preferências de tema salvas na nuvem');
+      } catch (firebaseError) {
+        warnLog('THEME', 'Não foi possível salvar no Firebase: ' + firebaseError.message);
+        
+        if (firebaseError.message?.includes('permission')) {
+          warnLog('THEME', 'Configure as regras do Firestore para sincronizar preferências');
         }
       }
-    } catch (error) {
-      errorLog('THEME', 'Erro ao salvar preferências de tema:', error);
-      // Não interromper fluxo - tema já foi aplicado visualmente
+    }
+  };
+
+  const applyTheme = (themeName, isSystemTheme = false) => {
+    const newTheme = themeName === 'dark' ? darkTheme : lightTheme;
+    setTheme(newTheme);
+    
+    if (!isSystemTheme) {
+      setLastManualTheme(themeName);
     }
   };
 
   const setDarkTheme = async () => {
     try {
       debugLog('THEME', 'Definindo tema escuro');
-      setTheme(darkTheme);
+      applyTheme('dark');
       setUseSystemTheme(false);
-      setLastManualTheme('dark');
       
-      // Salvar preferências de forma assíncrona
-      saveThemePreferences({
+      await saveThemePreferences({
         theme: 'dark',
         useSystem: false,
         lastManual: 'dark'
@@ -237,12 +237,10 @@ export const ThemeProvider = ({ children }) => {
   const setLightTheme = async () => {
     try {
       debugLog('THEME', 'Definindo tema claro');
-      setTheme(lightTheme);
+      applyTheme('light');
       setUseSystemTheme(false);
-      setLastManualTheme('light');
       
-      // Salvar preferências de forma assíncrona
-      saveThemePreferences({
+      await saveThemePreferences({
         theme: 'light',
         useSystem: false,
         lastManual: 'light'
@@ -258,19 +256,13 @@ export const ThemeProvider = ({ children }) => {
       setUseSystemTheme(useSystem);
       
       if (useSystem) {
-        const newTheme = systemColorScheme === 'dark' ? darkTheme : lightTheme;
-        setTheme(newTheme);
+        applyTheme(systemColorScheme, true);
         
-        // Salvar preferências de forma assíncrona
-        saveThemePreferences({
-          useSystem: true
-        });
+        await saveThemePreferences({ useSystem: true });
       } else {
-        const themeToRestore = lastManualTheme === 'dark' ? darkTheme : lightTheme;
-        setTheme(themeToRestore);
+        applyTheme(lastManualTheme);
         
-        // Salvar preferências de forma assíncrona
-        saveThemePreferences({
+        await saveThemePreferences({
           theme: lastManualTheme,
           useSystem: false
         });
@@ -280,7 +272,6 @@ export const ThemeProvider = ({ children }) => {
     }
   };
 
-  // Debug info (apenas em desenvolvimento)
   useEffect(() => {
     if (isThemeLoaded) {
       debugLog('THEME', 'Estado atual do Theme Context:', {
@@ -306,7 +297,6 @@ export const ThemeProvider = ({ children }) => {
       useSystemTheme,
       setSystemTheme,
       lastManualTheme,
-      // Info adicional para debug
       firestoreAvailable: user?.firestoreAvailable !== false
     }}>
       {children}

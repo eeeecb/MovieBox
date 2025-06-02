@@ -1,4 +1,3 @@
-// components/Base64ImageDebug.js
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -6,6 +5,51 @@ import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../contexts/ThemeContext';
 import { base64ImageService } from '../services/base64ImageService';
 import { debugLog, errorLog, successLog } from '../config/debugConfig';
+
+const DebugButton = ({ theme, onPress, disabled, style, children }) => (
+  <TouchableOpacity 
+    style={[
+      styles.button, 
+      style,
+      { opacity: disabled ? 0.5 : 1 }
+    ]}
+    onPress={onPress}
+    disabled={disabled}
+  >
+    <Text style={styles.buttonText}>{children}</Text>
+  </TouchableOpacity>
+);
+
+const ImagePreview = ({ image, label, theme }) => {
+  if (!image) return null;
+  
+  return (
+    <View style={styles.imagePreview}>
+      <Text style={[styles.previewLabel, { color: theme.colors.text }]}>
+        {label}
+      </Text>
+      <Image source={{ uri: image.uri || image.dataUri }} style={styles.previewImage} />
+      <Text style={[styles.previewSize, { color: theme.colors.secondaryText }]}>
+        {image.width}x{image.height}
+      </Text>
+    </View>
+  );
+};
+
+const LogDisplay = ({ testResult, theme }) => {
+  if (!testResult) return null;
+  
+  return (
+    <ScrollView style={styles.resultContainer} nestedScrollEnabled={true}>
+      <Text style={[styles.resultTitle, { color: theme.colors.text }]}>
+        📋 Log de Debug:
+      </Text>
+      <Text style={[styles.resultText, { color: theme.colors.secondaryText }]}>
+        {testResult}
+      </Text>
+    </ScrollView>
+  );
+};
 
 export default function Base64ImageDebug() {
   const { theme } = useTheme();
@@ -16,7 +60,6 @@ export default function Base64ImageDebug() {
   const [processing, setProcessing] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Só mostrar em desenvolvimento
   if (!__DEV__) return null;
 
   const logTestResult = (message, type = 'info') => {
@@ -24,13 +67,13 @@ export default function Base64ImageDebug() {
     const newResult = `[${timestamp}] ${type.toUpperCase()}: ${message}\n`;
     setTestResult(prev => prev + newResult);
     
-    if (type === 'error') {
-      errorLog('BASE64_DEBUG', message);
-    } else if (type === 'success') {
-      successLog('BASE64_DEBUG', message);
-    } else {
-      debugLog('BASE64_DEBUG', message);
-    }
+    const logFunctions = {
+      error: errorLog,
+      success: successLog,
+      info: debugLog
+    };
+    
+    (logFunctions[type] || debugLog)('BASE64_DEBUG', message);
   };
 
   const clearResults = () => {
@@ -39,49 +82,86 @@ export default function Base64ImageDebug() {
     setBase64Result(null);
   };
 
-  const checkUserAuth = () => {
+  const analyzeUserPhoto = () => {
     logTestResult('👤 Verificando autenticação...');
     
-    if (user) {
-      logTestResult(`✅ Usuário logado: ${user.email}`, 'success');
-      logTestResult(`🆔 UID: ${user.uid}`);
-      logTestResult(`📸 Foto atual: ${user.photoURL ? 'Sim' : 'Não'}`);
-      
-      if (user.photoURL) {
-        const isBase64 = user.photoURL.startsWith('data:image/');
-        logTestResult(`📋 Tipo de foto: ${isBase64 ? 'Base64' : 'URL'}`);
-        
-        if (isBase64) {
-          const parsed = base64ImageService.parseDataUri(user.photoURL);
-          if (parsed) {
-            logTestResult(`📏 Tamanho atual: ${parsed.sizeKB}KB`);
-            logTestResult(`🎨 Formato: ${parsed.mimeType}`);
-          }
-        }
-      }
-    } else {
+    if (!user) {
       logTestResult('❌ Usuário não logado', 'error');
+      return;
     }
+
+    logTestResult(`✅ Usuário logado: ${user.email}`, 'success');
+    logTestResult(`🆔 UID: ${user.uid}`);
+    logTestResult(`📸 Foto atual: ${user.photoURL ? 'Sim' : 'Não'}`);
+    
+    if (user.photoURL) {
+      const isBase64 = user.photoURL.startsWith('data:image/');
+      logTestResult(`📋 Tipo de foto: ${isBase64 ? 'Base64' : 'URL'}`);
+      
+      if (isBase64) {
+        const parsed = base64ImageService.parseDataUri(user.photoURL);
+        if (parsed) {
+          logTestResult(`📏 Tamanho atual: ${parsed.sizeKB}KB`);
+          logTestResult(`🎨 Formato: ${parsed.mimeType}`);
+          logTestResult(`✅ Válida: ${parsed.isValid ? 'Sim' : 'Não'}`);
+          
+          if (!parsed.isValid) {
+            logTestResult('⚠️ Foto atual muito grande para padrão', 'error');
+          }
+        } else {
+          logTestResult('❌ Erro ao analisar base64', 'error');
+        }
+      } else {
+        logTestResult('ℹ️ Foto atual é URL (não base64)');
+        logTestResult(`🔗 URL: ${user.photoURL.substring(0, 50)}...`);
+      }
+    }
+  };
+
+  const requestImagePermission = async () => {
+    logTestResult('📱 Solicitando permissão para galeria...');
+    
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      logTestResult('❌ Permissão negada', 'error');
+      return false;
+    }
+    
+    logTestResult('✅ Permissão concedida, abrindo galeria...');
+    return true;
+  };
+
+  const analyzeSelectedImage = (asset) => {
+    logTestResult('📋 Analisando imagem selecionada...');
+    logTestResult(`📁 URI: ${asset.uri?.substring(0, 60)}...`);
+    logTestResult(`🎨 Tipo: ${asset.mimeType || 'não informado'}`);
+    logTestResult(`📏 Tamanho arquivo: ${asset.fileSize ? (asset.fileSize / 1024).toFixed(2) + ' KB' : 'não informado'}`);
+    logTestResult(`📐 Dimensões: ${asset.width}x${asset.height}`);
+    logTestResult(`📝 Nome: ${asset.fileName || 'não informado'}`);
+    
+    logTestResult('🔍 Validando imagem para base64...');
+    const validation = base64ImageService.validateImageForBase64(asset);
+    
+    if (validation.isValid) {
+      logTestResult('✅ Imagem válida para conversão!', 'success');
+    } else {
+      logTestResult(`❌ Imagem inválida: ${validation.error}`, 'error');
+    }
+    
+    return validation.isValid;
   };
 
   const selectImage = async () => {
     try {
-      logTestResult('📱 Solicitando permissão para galeria...');
-      
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        logTestResult('❌ Permissão negada', 'error');
-        return;
-      }
-      
-      logTestResult('✅ Permissão concedida, abrindo galeria...');
+      const hasPermission = await requestImagePermission();
+      if (!hasPermission) return;
       
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 1.0, // Qualidade máxima para teste
+        quality: 1.0,
         allowsMultipleSelection: false,
       });
       
@@ -96,24 +176,10 @@ export default function Base64ImageDebug() {
       }
       
       const asset = result.assets[0];
+      const isValid = analyzeSelectedImage(asset);
       
-      logTestResult('📋 Analisando imagem selecionada...');
-      logTestResult(`📁 URI: ${asset.uri?.substring(0, 60)}...`);
-      logTestResult(`🎨 Tipo: ${asset.mimeType || 'não informado'}`);
-      logTestResult(`📏 Tamanho arquivo: ${asset.fileSize ? (asset.fileSize / 1024).toFixed(2) + ' KB' : 'não informado'}`);
-      logTestResult(`📐 Dimensões: ${asset.width}x${asset.height}`);
-      logTestResult(`📝 Nome: ${asset.fileName || 'não informado'}`);
-      
-      setSelectedImage(asset);
-      
-      // Validar para base64
-      logTestResult('🔍 Validando imagem para base64...');
-      const validation = base64ImageService.validateImageForBase64(asset);
-      
-      if (validation.isValid) {
-        logTestResult('✅ Imagem válida para conversão!', 'success');
-      } else {
-        logTestResult(`❌ Imagem inválida: ${validation.error}`, 'error');
+      if (isValid) {
+        setSelectedImage(asset);
       }
       
     } catch (error) {
@@ -141,8 +207,6 @@ export default function Base64ImageDebug() {
         logTestResult(`💾 Base64 preview: ${result.base64.substring(0, 50)}...`);
         
         setBase64Result(result);
-        
-        // Debug da imagem final
         base64ImageService.debugImageStats(result.dataUri);
       } else {
         logTestResult(`❌ Falha na conversão: ${result.error}`, 'error');
@@ -172,7 +236,6 @@ export default function Base64ImageDebug() {
         mimeType: selectedImage.mimeType
       };
       
-      // Usar a função real do hook de auth
       const result = await updateProfilePicture(selectedImage.uri, fileInfo);
       
       if (result.success) {
@@ -191,34 +254,14 @@ export default function Base64ImageDebug() {
     }
   };
 
-  const testExistingPhoto = () => {
-    if (!user?.photoURL) {
-      logTestResult('❌ Usuário não tem foto de perfil', 'error');
-      return;
-    }
-    
-    logTestResult('🔍 Analisando foto de perfil atual...');
-    
-    if (user.photoURL.startsWith('data:image/')) {
-      logTestResult('✅ Foto atual é base64', 'success');
-      
-      const parsed = base64ImageService.parseDataUri(user.photoURL);
-      if (parsed) {
-        logTestResult(`📏 Tamanho: ${parsed.sizeKB}KB`);
-        logTestResult(`🎨 Formato: ${parsed.mimeType}`);
-        logTestResult(`✅ Válida: ${parsed.isValid ? 'Sim' : 'Não'}`);
-        
-        if (!parsed.isValid) {
-          logTestResult('⚠️ Foto atual muito grande para padrão', 'error');
-        }
-      } else {
-        logTestResult('❌ Erro ao analisar base64', 'error');
-      }
-    } else {
-      logTestResult('ℹ️ Foto atual é URL (não base64)');
-      logTestResult(`🔗 URL: ${user.photoURL.substring(0, 50)}...`);
-    }
-  };
+  const buttonConfigs = [
+    { onPress: analyzeUserPhoto, color: theme.colors.primary, text: 'Verificar Auth' },
+    { onPress: () => user?.photoURL ? analyzeUserPhoto() : logTestResult('❌ Usuário não tem foto de perfil', 'error'), color: '#9C27B0', text: 'Analisar Foto' },
+    { onPress: selectImage, color: '#2196F3', text: 'Selecionar' },
+    { onPress: processToBase64, color: '#FF9800', text: processing ? 'Processando...' : 'Para Base64', disabled: !selectedImage || processing },
+    { onPress: uploadToFirestore, color: '#4CAF50', text: uploading ? 'Enviando...' : 'Upload Final', disabled: !base64Result || uploading },
+    { onPress: clearResults, color: '#757575', text: 'Limpar' }
+  ];
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.card, borderColor: '#4CAF50' }]}>
@@ -226,113 +269,34 @@ export default function Base64ImageDebug() {
         🖼️ Debug Base64 (Grátis)
       </Text>
       
-      {/* Primeira linha de botões */}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity 
-          style={[styles.button, { backgroundColor: theme.colors.primary }]}
-          onPress={checkUserAuth}
-        >
-          <Text style={styles.buttonText}>Verificar Auth</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.button, { backgroundColor: '#9C27B0' }]}
-          onPress={testExistingPhoto}
-        >
-          <Text style={styles.buttonText}>Analisar Foto</Text>
-        </TouchableOpacity>
+      <View style={styles.buttonGrid}>
+        {buttonConfigs.map((config, index) => (
+          <DebugButton
+            key={index}
+            theme={theme}
+            onPress={config.onPress}
+            disabled={config.disabled}
+            style={{ backgroundColor: config.color }}
+          >
+            {config.text}
+          </DebugButton>
+        ))}
       </View>
       
-      {/* Segunda linha de botões */}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity 
-          style={[styles.button, { backgroundColor: '#2196F3' }]}
-          onPress={selectImage}
-        >
-          <Text style={styles.buttonText}>Selecionar</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[
-            styles.button, 
-            { 
-              backgroundColor: processing ? '#999' : '#FF9800',
-              opacity: !selectedImage ? 0.5 : 1
-            }
-          ]}
-          onPress={processToBase64}
-          disabled={!selectedImage || processing}
-        >
-          <Text style={styles.buttonText}>
-            {processing ? 'Processando...' : 'Para Base64'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-      
-      {/* Terceira linha de botões */}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity 
-          style={[
-            styles.button, 
-            { 
-              backgroundColor: uploading ? '#999' : '#4CAF50',
-              opacity: !base64Result ? 0.5 : 1
-            }
-          ]}
-          onPress={uploadToFirestore}
-          disabled={!base64Result || uploading}
-        >
-          <Text style={styles.buttonText}>
-            {uploading ? 'Enviando...' : 'Upload Final'}
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.button, styles.clearButton]}
-          onPress={clearResults}
-        >
-          <Text style={styles.buttonText}>Limpar</Text>
-        </TouchableOpacity>
-      </View>
-      
-      {/* Preview das imagens */}
       <View style={styles.previewContainer}>
-        {selectedImage && (
-          <View style={styles.imagePreview}>
-            <Text style={[styles.previewLabel, { color: theme.colors.text }]}>
-              Original:
-            </Text>
-            <Image source={{ uri: selectedImage.uri }} style={styles.previewImage} />
-            <Text style={[styles.previewSize, { color: theme.colors.secondaryText }]}>
-              {selectedImage.width}x{selectedImage.height}
-            </Text>
-          </View>
-        )}
-        
-        {base64Result && (
-          <View style={styles.imagePreview}>
-            <Text style={[styles.previewLabel, { color: theme.colors.text }]}>
-              Base64 ({base64Result.sizeKB}KB):
-            </Text>
-            <Image source={{ uri: base64Result.dataUri }} style={styles.previewImage} />
-            <Text style={[styles.previewSize, { color: theme.colors.secondaryText }]}>
-              {base64Result.width}x{base64Result.height}
-            </Text>
-          </View>
-        )}
+        <ImagePreview 
+          image={selectedImage} 
+          label="Original:" 
+          theme={theme} 
+        />
+        <ImagePreview 
+          image={base64Result} 
+          label={`Base64 (${base64Result?.sizeKB || 0}KB):`} 
+          theme={theme} 
+        />
       </View>
       
-      {/* Resultados */}
-      {testResult ? (
-        <ScrollView style={styles.resultContainer} nestedScrollEnabled={true}>
-          <Text style={[styles.resultTitle, { color: theme.colors.text }]}>
-            📋 Log de Debug:
-          </Text>
-          <Text style={[styles.resultText, { color: theme.colors.secondaryText }]}>
-            {testResult}
-          </Text>
-        </ScrollView>
-      ) : null}
+      <LogDisplay testResult={testResult} theme={theme} />
     </View>
   );
 }
@@ -350,10 +314,12 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     textAlign: 'center',
   },
-  buttonRow: {
+  buttonGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-around',
     marginBottom: 10,
+    gap: 8,
   },
   button: {
     paddingHorizontal: 12,
@@ -361,9 +327,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     minWidth: 70,
     alignItems: 'center',
-  },
-  clearButton: {
-    backgroundColor: '#757575',
+    marginBottom: 5,
   },
   buttonText: {
     color: 'white',

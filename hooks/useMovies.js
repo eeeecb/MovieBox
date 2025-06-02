@@ -1,4 +1,3 @@
-// hooks/useMovies.js
 import { useState, useEffect } from 'react';
 import { tmdbApi } from '../services/tmdbApi';
 
@@ -24,19 +23,10 @@ export const useMovies = () => {
         tmdbApi.getTopRatedMovies()
       ]);
 
-      if (nowPlayingResult.success) {
-        setNowPlayingMovies(nowPlayingResult.data);
-      }
+      if (nowPlayingResult.success) setNowPlayingMovies(nowPlayingResult.data);
+      if (popularResult.success) setPopularMovies(popularResult.data);
+      if (topRatedResult.success) setTopRatedMovies(topRatedResult.data);
 
-      if (popularResult.success) {
-        setPopularMovies(popularResult.data);
-      }
-
-      if (topRatedResult.success) {
-        setTopRatedMovies(topRatedResult.data);
-      }
-
-      // Se todos falharam, definir erro
       if (!nowPlayingResult.success && !popularResult.success && !topRatedResult.success) {
         setError('Erro ao carregar filmes');
       }
@@ -47,21 +37,16 @@ export const useMovies = () => {
     }
   };
 
-  const refreshMovies = () => {
-    loadAllMovies();
-  };
-
   return {
     nowPlayingMovies,
     popularMovies,
     topRatedMovies,
     loading,
     error,
-    refreshMovies
+    refreshMovies: loadAllMovies
   };
 };
 
-// Hook para detalhes de um filme específico
 export const useMovieDetails = (movieId) => {
   const [movie, setMovie] = useState(null);
   const [cast, setCast] = useState([]);
@@ -94,7 +79,7 @@ export const useMovieDetails = (movieId) => {
       }
 
       if (creditsResult.success) {
-        setCast(creditsResult.data.slice(0, 6)); // Pegar apenas 6 atores principais
+        setCast(creditsResult.data.slice(0, 6));
       }
     } catch (err) {
       setError(err.message);
@@ -112,7 +97,6 @@ export const useMovieDetails = (movieId) => {
   };
 };
 
-// Hook para pesquisa de filmes
 export const useMovieSearch = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);

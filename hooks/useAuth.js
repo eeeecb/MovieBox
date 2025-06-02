@@ -1,4 +1,3 @@
-// hooks/useAuth.js
 import { useState, useEffect, useCallback } from 'react';
 import { firebaseAuthService } from '../services/firebaseAuth';
 import { debugLog, errorLog, successLog } from '../config/debugConfig';
@@ -9,7 +8,6 @@ export const useAuth = () => {
   const [error, setError] = useState(null);
   const [initializing, setInitializing] = useState(true);
 
-  // Limpar erro após um tempo
   const clearError = useCallback(() => {
     if (error) {
       setTimeout(() => setError(null), 5000);
@@ -27,20 +25,12 @@ export const useAuth = () => {
       try {
         debugLog('AUTH_HOOK', 'Configurando listener de autenticação...');
         
-        // Aguardar Firebase estar inicializado
         await firebaseAuthService.ensureInitialized();
         
-        // Configurar listener de mudanças de autenticação
         unsubscribe = await firebaseAuthService.onAuthStateChanged((firebaseUser) => {
           debugLog('AUTH_HOOK', 'Auth state changed:', firebaseUser ? 'User logged in' : 'User logged out');
           
-          if (firebaseUser) {
-            setUser(firebaseUser);
-            debugLog('AUTH_HOOK', 'Usuário definido no estado', { uid: firebaseUser.uid, email: firebaseUser.email });
-          } else {
-            setUser(null);
-            debugLog('AUTH_HOOK', 'Usuário removido do estado');
-          }
+          setUser(firebaseUser);
           
           if (initializing) {
             setInitializing(false);
@@ -60,7 +50,6 @@ export const useAuth = () => {
 
     setupAuthListener();
 
-    // Cleanup
     return () => {
       if (unsubscribe && typeof unsubscribe === 'function') {
         debugLog('AUTH_HOOK', 'Removendo listener de autenticação');
@@ -69,71 +58,44 @@ export const useAuth = () => {
     };
   }, [initializing]);
 
-  const register = async (name, email, password) => {
+  const handleAuthAction = async (action, ...args) => {
     setLoading(true);
     setError(null);
     
-    debugLog('AUTH_HOOK', 'Iniciando registro via hook', { name, email });
-    
     try {
-      const result = await firebaseAuthService.register(name, email, password);
+      const result = await action(...args);
       
       if (!result.success) {
         setError(result.error);
-        debugLog('AUTH_HOOK', 'Registro falhou', { error: result.error });
-      } else {
-        successLog('AUTH_HOOK', 'Registro bem-sucedido via hook');
       }
       
       return result;
     } catch (err) {
-      const errorMessage = err.message || 'Erro inesperado no registro';
+      const errorMessage = err.message || 'Erro inesperado';
       setError(errorMessage);
-      errorLog('AUTH_HOOK', 'Exceção no registro:', err);
       return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }
+  };
+
+  const register = async (name, email, password) => {
+    debugLog('AUTH_HOOK', 'Iniciando registro via hook', { name, email });
+    return handleAuthAction(firebaseAuthService.register, name, email, password);
   };
 
   const login = async (email, password) => {
-    setLoading(true);
-    setError(null);
-    
     debugLog('AUTH_HOOK', 'Iniciando login via hook', { email });
-    
-    try {
-      const result = await firebaseAuthService.login(email, password);
-      
-      if (!result.success) {
-        setError(result.error);
-        debugLog('AUTH_HOOK', 'Login falhou', { error: result.error });
-      } else {
-        successLog('AUTH_HOOK', 'Login bem-sucedido via hook');
-      }
-      
-      return result;
-    } catch (err) {
-      const errorMessage = err.message || 'Erro inesperado no login';
-      setError(errorMessage);
-      errorLog('AUTH_HOOK', 'Exceção no login:', err);
-      return { success: false, error: errorMessage };
-    } finally {
-      setLoading(false);
-    }
+    return handleAuthAction(firebaseAuthService.login, email, password);
   };
 
   const logout = async () => {
-    setLoading(true);
-    setError(null);
-    
     debugLog('AUTH_HOOK', 'Iniciando logout via hook');
     
     try {
       const result = await firebaseAuthService.logout();
       
       if (result.success) {
-        // Forçar limpeza local dos dados do usuário
         setUser(null);
         successLog('AUTH_HOOK', 'Logout concluído com sucesso via hook');
       } else {
@@ -147,7 +109,6 @@ export const useAuth = () => {
       setError(errorMessage);
       errorLog('AUTH_HOOK', 'Exceção no logout:', err);
       
-      // Em caso de erro, forçar limpeza local
       setUser(null);
       debugLog('AUTH_HOOK', 'Limpeza forçada do usuário após erro');
       
@@ -160,59 +121,15 @@ export const useAuth = () => {
   const updateProfile = async (data) => {
     if (!user) return { success: false, error: 'Usuário não autenticado' };
     
-    setLoading(true);
-    setError(null);
-    
     debugLog('AUTH_HOOK', 'Atualizando perfil via hook', { uid: user.uid, data });
-    
-    try {
-      const result = await firebaseAuthService.updateUserProfile(user.uid, data);
-      
-      if (!result.success) {
-        setError(result.error);
-        debugLog('AUTH_HOOK', 'Atualização de perfil falhou', { error: result.error });
-      } else {
-        successLog('AUTH_HOOK', 'Perfil atualizado com sucesso via hook');
-      }
-      
-      return result;
-    } catch (err) {
-      const errorMessage = err.message || 'Erro inesperado ao atualizar perfil';
-      setError(errorMessage);
-      errorLog('AUTH_HOOK', 'Exceção na atualização de perfil:', err);
-      return { success: false, error: errorMessage };
-    } finally {
-      setLoading(false);
-    }
+    return handleAuthAction(firebaseAuthService.updateUserProfile, user.uid, data);
   };
 
   const updateProfilePicture = async (imageUri, fileInfo = {}) => {
     if (!user) return { success: false, error: 'Usuário não autenticado' };
     
-    setLoading(true);
-    setError(null);
-    
     debugLog('AUTH_HOOK', 'Atualizando foto de perfil via hook', { uid: user.uid });
-    
-    try {
-      const result = await firebaseAuthService.updateProfilePicture(user.uid, imageUri, fileInfo);
-      
-      if (!result.success) {
-        setError(result.error);
-        debugLog('AUTH_HOOK', 'Atualização de foto falhou', { error: result.error });
-      } else {
-        successLog('AUTH_HOOK', 'Foto de perfil atualizada com sucesso via hook');
-      }
-      
-      return result;
-    } catch (err) {
-      const errorMessage = err.message || 'Erro inesperado ao atualizar foto';
-      setError(errorMessage);
-      errorLog('AUTH_HOOK', 'Exceção na atualização de foto:', err);
-      return { success: false, error: errorMessage };
-    } finally {
-      setLoading(false);
-    }
+    return handleAuthAction(firebaseAuthService.updateProfilePicture, user.uid, imageUri, fileInfo);
   };
 
   const updatePreferences = async (preferences) => {
@@ -238,34 +155,11 @@ export const useAuth = () => {
     }
   };
 
-  const deleteAccount = async (password) => {
-    if (!user) return { success: false, error: 'Usuário não autenticado' };
-    
-    setLoading(true);
-    setError(null);
-    
-    debugLog('AUTH_HOOK', 'Tentativa de deletar conta via hook', { uid: user.uid });
-    
-    try {
-      // Implementar se necessário
-      debugLog('AUTH_HOOK', 'Função de deletar conta não implementada');
-      return { success: false, error: 'Função não implementada' };
-    } catch (err) {
-      const errorMessage = err.message || 'Erro ao deletar conta';
-      setError(errorMessage);
-      errorLog('AUTH_HOOK', 'Exceção ao deletar conta:', err);
-      return { success: false, error: errorMessage };
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const clearAuthError = () => {
     debugLog('AUTH_HOOK', 'Limpando erro de autenticação');
     setError(null);
   };
 
-  // Log do estado atual quando há mudanças significativas
   useEffect(() => {
     debugLog('AUTH_HOOK', 'Estado do hook atualizado:', {
       hasUser: !!user,
@@ -288,7 +182,6 @@ export const useAuth = () => {
     updateProfile,
     updateProfilePicture,
     updatePreferences,
-    deleteAccount,
     clearAuthError
   };
 };
