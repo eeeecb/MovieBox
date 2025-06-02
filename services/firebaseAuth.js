@@ -1,4 +1,4 @@
-// services/firebaseAuth.js
+// services/firebaseAuth.js - VERSÃO COM BASE64
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -10,7 +10,7 @@ import {
   reauthenticateWithCredential
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { firebaseStorageService } from './firebaseStorage';
+import { base64ImageService } from './base64ImageService'; // 🆕 Novo serviço
 import { debugLog, errorLog, successLog, warnLog } from '../config/debugConfig';
 
 // Importação dinâmica para evitar problemas de inicialização
@@ -53,8 +53,8 @@ export const firebaseAuthService = {
           name,
           email,
           displayName: name,
-          profilePicture: null,
-          photoURL: null,
+          profilePictureBase64: null, // 🆕 Campo para base64
+          photoURL: null, // Manter compatibilidade
           createdAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString(),
           uid: user.uid,
@@ -130,6 +130,16 @@ export const firebaseAuthService = {
         };
       }
       
+      // 🆕 Determinar photoURL (priorizar base64, fallback para URL)
+      let photoURL = user.photoURL;
+      if (userData?.profilePictureBase64) {
+        photoURL = userData.profilePictureBase64; // Base64 data URI
+        debugLog('AUTH', 'Usando foto de perfil em base64');
+      } else if (userData?.photoURL) {
+        photoURL = userData.photoURL;
+        debugLog('AUTH', 'Usando photoURL do Firestore');
+      }
+      
       successLog('AUTH', 'Login concluído com sucesso');
       return { 
         success: true, 
@@ -137,7 +147,7 @@ export const firebaseAuthService = {
           uid: user.uid,
           email: user.email,
           displayName: user.displayName,
-          photoURL: user.photoURL || userData?.profilePicture || userData?.photoURL,
+          photoURL: photoURL,
           ...userData
         }
       };
@@ -235,74 +245,75 @@ export const firebaseAuthService = {
     }
   },
 
-  // Atualizar foto de perfil - com fallback
+  // 🆕 Atualizar foto de perfil usando Base64
   async updateProfilePicture(uid, imageUri, fileInfo = {}) {
     try {
       await this.ensureInitialized();
       
-      debugLog('AUTH', 'Atualizando foto de perfil', { uid });
+      debugLog('AUTH', 'Atualizando foto de perfil (Base64)', { uid });
       
       const currentUser = auth.currentUser;
       if (!currentUser || currentUser.uid !== uid) {
         return { success: false, error: 'Usuário não autenticado' };
       }
 
-      // Buscar dados atuais do usuário (com fallback)
-      let userData = {};
-      let oldPhotoURL = null;
-      
-      try {
-        const userDoc = await getDoc(doc(db, 'users', uid));
-        userData = userDoc.exists() ? userDoc.data() : {};
-        oldPhotoURL = userData.profilePicture || userData.photoURL;
-        debugLog('AUTH', 'Dados atuais do usuário carregados');
-      } catch (firestoreError) {
-        warnLog('AUTH', 'Não foi possível buscar dados atuais: ' + firestoreError.message);
-        oldPhotoURL = currentUser.photoURL;
+      // 🆕 Validar imagem para base64
+      debugLog('AUTH', 'Validando imagem para conversão base64...');
+      const validation = base64ImageService.validateImageForBase64({
+        width: fileInfo.width,
+        height: fileInfo.height,
+        fileSize: fileInfo.fileSize,
+        mimeType: fileInfo.mimeType
+      });
+
+      if (!validation.isValid) {
+        return { success: false, error: validation.error };
       }
 
-      // Fazer upload da nova imagem
-      debugLog('AUTH', 'Iniciando upload da imagem');
-      const uploadResult = await firebaseStorageService.uploadProfilePicture(
-        uid, 
-        imageUri, 
-        fileInfo
-      );
+      // 🆕 Processar imagem para base64
+      debugLog('AUTH', 'Convertendo imagem para base64...');
+      const base64Result = await base64ImageService.processImageToBase64(imageUri);
 
-      if (!uploadResult.success) {
-        return uploadResult;
+      if (!base64Result.success) {
+        return { success: false, error: base64Result.error };
       }
 
-      const newPhotoURL = uploadResult.downloadURL;
-      debugLog('AUTH', 'Upload concluído', { newPhotoURL });
+      const { dataUri, sizeKB } = base64Result;
+      debugLog('AUTH', `Imagem convertida para base64: ${sizeKB}KB`);
 
-      // Atualizar Authentication
-      await updateProfile(currentUser, { photoURL: newPhotoURL });
-      debugLog('AUTH', 'PhotoURL atualizado no Firebase Auth');
-
-      // Tentar atualizar Firestore
+      // 🆕 Salvar base64 no Firestore
       try {
         await updateDoc(doc(db, 'users', uid), {
-          profilePicture: newPhotoURL,
-          photoURL: newPhotoURL,
-          updatedAt: new Date().toISOString()
+          profilePictureBase64: dataUri, // 🆕 Salvar data URI completo
+          photoURL: dataUri, // Manter compatibilidade
+          updatedAt: new Date().toISOString(),
+          profilePictureStats: { // 🆕 Metadados para debug
+            sizeKB: sizeKB,
+            width: base64Result.width,
+            height: base64Result.height,
+            updatedAt: new Date().toISOString()
+          }
         });
-        debugLog('AUTH', 'Foto atualizada no Firestore');
+        debugLog('AUTH', 'Base64 salvo no Firestore com sucesso');
       } catch (firestoreError) {
-        warnLog('AUTH', 'Não foi possível atualizar foto no Firestore: ' + firestoreError.message);
-        // Não é crítico, a foto foi atualizada no Auth
+        warnLog('AUTH', 'Não foi possível salvar no Firestore: ' + firestoreError.message);
+        return { success: false, error: 'Erro ao salvar imagem. Verifique sua conexão.' };
       }
 
-      // Deletar imagem anterior (se existir)
-      if (oldPhotoURL && oldPhotoURL !== newPhotoURL) {
-        await firebaseStorageService.deleteProfilePicture(oldPhotoURL);
-        debugLog('AUTH', 'Imagem anterior deletada');
+      // 🆕 Atualizar Authentication com data URI
+      try {
+        await updateProfile(currentUser, { photoURL: dataUri });
+        debugLog('AUTH', 'PhotoURL atualizado no Firebase Auth');
+      } catch (authError) {
+        warnLog('AUTH', 'Não foi possível atualizar Auth photoURL: ' + authError.message);
+        // Não é crítico, dados foram salvos no Firestore
       }
 
-      successLog('AUTH', 'Foto de perfil atualizada com sucesso');
+      successLog('AUTH', `Foto de perfil atualizada (Base64 - ${sizeKB}KB)`);
       return { 
         success: true, 
-        photoURL: newPhotoURL 
+        photoURL: dataUri,
+        sizeKB: sizeKB
       };
 
     } catch (error) {
@@ -390,8 +401,15 @@ export const firebaseAuthService = {
               };
             }
             
-            // Sincronizar photoURL entre Authentication e Firestore
-            const photoURL = firebaseUser.photoURL || userData.profilePicture || userData.photoURL;
+            // 🆕 Sincronizar photoURL: priorizar base64, fallback para URL
+            let photoURL = firebaseUser.photoURL;
+            if (userData.profilePictureBase64) {
+              photoURL = userData.profilePictureBase64;
+              debugLog('AUTH', 'Usando profilePictureBase64');
+            } else if (userData.photoURL) {
+              photoURL = userData.photoURL;
+              debugLog('AUTH', 'Usando photoURL do Firestore');
+            }
             
             const enrichedUser = {
               uid: firebaseUser.uid,
@@ -409,7 +427,11 @@ export const firebaseAuthService = {
               firestoreAvailable: Object.keys(userData).length > 1
             };
             
-            debugLog('AUTH', 'Usuário enriquecido criado', { uid: enrichedUser.uid, firestoreAvailable: enrichedUser.firestoreAvailable });
+            debugLog('AUTH', 'Usuário enriquecido criado', { 
+              uid: enrichedUser.uid, 
+              firestoreAvailable: enrichedUser.firestoreAvailable,
+              hasBase64Photo: !!userData.profilePictureBase64
+            });
             callback(enrichedUser);
           } catch (error) {
             errorLog('AUTH', 'Erro geral ao processar usuário:', error);

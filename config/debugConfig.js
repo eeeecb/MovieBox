@@ -16,7 +16,6 @@ export const DEBUG_CONFIG = {
   THEME_LOGS: true,          // Logs do sistema de temas
   NAVIGATION_LOGS: true,     // Logs de navegação
   FIREBASE_LOGS: true,       // Logs de inicialização do Firebase
-  STORAGE_LOGS: true,        // Logs do Firebase Storage
 };
 
 /**

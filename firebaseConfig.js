@@ -2,7 +2,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { debugLog, errorLog, successLog } from './config/debugConfig';
 
@@ -11,7 +10,6 @@ const firebaseConfig = {
   apiKey: "AIzaSyANBzWjHohwvzFuU4X7RD9BNx3C4KCYqdA",
   authDomain: "moviebox-36a3.firebaseapp.com",
   projectId: "moviebox-36a3",
-  storageBucket: "moviebox-36a3.firebasestorage.app",
   messagingSenderId: "624126096018",
   appId: "1:624126096018:web:70b122a4f9c28ea654ac4b",
   measurementId: "G-RB3Q30ET88"
@@ -43,22 +41,20 @@ try {
   auth = getAuth(app);
 }
 
-// Inicializar Firestore e Storage
+// Inicializar Firestore
 const db = getFirestore(app);
-const storage = getStorage(app);
 
 // Log de inicialização
 debugLog('FIREBASE', 'Serviços Firebase inicializados:', {
   auth: !!auth,
   db: !!db,
-  storage: !!storage,
   appName: app.name,
   projectId: firebaseConfig.projectId
 });
 
 successLog('FIREBASE', 'Firebase configurado com sucesso');
 
-export { auth, db, storage };
+export { auth, db };
 export default app;
 
 // Função para debug
@@ -74,7 +70,7 @@ export const debugFirebase = () => {
 // Função para verificar se o Firebase está pronto
 export const isFirebaseReady = () => {
   try {
-    const isReady = !!(auth && db && storage);
+    const isReady = !!(auth && db );
     debugLog('FIREBASE', 'Verificação de prontidão:', { isReady });
     return isReady;
   } catch (error) {
