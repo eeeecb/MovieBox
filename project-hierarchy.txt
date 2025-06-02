@@ -1,7 +1,13 @@
 MovieBox
 ├─ App.js
 ├─ app.json
+├─ assets
+│  ├─ adaptive-icon.png
+│  ├─ favicon.png
+│  ├─ icon.png
+│  └─ splash-icon.png
 ├─ components
+│  ├─ Base64ImageDebug.js
 │  ├─ CustomDrawerContent.js
 │  ├─ SimpleDebug.js
 │  └─ ThemePreview.js
@@ -21,6 +27,7 @@ MovieBox
 │  └─ MainNavigator.js
 ├─ package-lock.json
 ├─ package.json
+├─ project-hierarchy.txt
 ├─ README.md
 ├─ screens
 │  ├─ ActorScreen.js
@@ -31,6 +38,7 @@ MovieBox
 │  ├─ ProfileScreen.js
 │  └─ SettingsScreen.js
 ├─ services
+│  ├─ base64ImageService.js
 │  ├─ firebaseAuth.js
 │  ├─ firestoreService.js
 │  └─ tmdbApi.js
