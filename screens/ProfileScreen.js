@@ -1,4 +1,3 @@
-// src/screens/ProfileScreen.js - VERSÃO LIMPA
 import React, { useState } from "react";
 import {
   View,
@@ -20,13 +19,13 @@ import Constants from "expo-constants";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
 import { useFavorites } from "../hooks/useFavorites";
-import { showErrorAlert, showSuccessAlert, showImageSourceAlert } from '../utils/crossPlatformAlert';
+import { showErrorAlert, showSuccessAlert, showConfirmAlert } from '../utils/crossPlatformAlert';
 import { base64ImageService } from '../services/base64ImageService';
 import { debugLog, errorLog, successLog } from '../config/debugConfig';
 
 export default function ProfileScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const { user, updateProfile, updateProfilePicture, loading: authLoading } = useAuth();
+  const { user, updateProfile, updateProfilePicture, removeProfilePicture, loading: authLoading } = useAuth();
   const { favorites, loading: favoritesLoading } = useFavorites(user?.uid);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -67,14 +66,12 @@ export default function ProfileScreen({ navigation }) {
     try {
       debugLog('PROFILE', 'Iniciando processamento de imagem');
       
-      // Validar imagem para base64
       const validation = base64ImageService.validateImageForBase64(asset);
       if (!validation.isValid) {
         showErrorAlert('Imagem Inválida', validation.error);
         return false;
       }
 
-      // Processar para base64
       const base64Result = await base64ImageService.processImageToBase64(imageUri);
       
       if (!base64Result.success) {
@@ -82,7 +79,6 @@ export default function ProfileScreen({ navigation }) {
         return false;
       }
 
-      // Upload usando o sistema de auth
       const fileInfo = {
         fileSize: asset.fileSize,
         width: asset.width,
@@ -94,7 +90,11 @@ export default function ProfileScreen({ navigation }) {
       
       if (uploadResult.success) {
         successLog('PROFILE', 'Upload concluído com sucesso');
-        showSuccessAlert('Sucesso!', 'Foto de perfil atualizada com sucesso');
+        showSuccessAlert('Sucesso!', 'Foto de perfil atualizada com sucesso', () => {
+          if (Platform.OS === 'web') {
+            setTimeout(() => window.location.reload(), 1000);
+          }
+        });
         return true;
       } else {
         showErrorAlert('Erro no Upload', uploadResult.error);
@@ -108,7 +108,80 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
-  const pickImage = async () => {
+  const pickImageFromComputer = async () => {
+    try {
+      debugLog('PROFILE', 'Iniciando seleção via computador/web...');
+      
+      if (Platform.OS !== 'web') {
+        showErrorAlert('Erro', 'Esta opção está disponível apenas na versão web');
+        return;
+      }
+
+      setIsUploadingImage(true);
+
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/jpeg,image/jpg,image/png,image/webp';
+      
+      input.onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) {
+          debugLog('PROFILE', 'Nenhum arquivo selecionado');
+          setIsUploadingImage(false);
+          return;
+        }
+
+        debugLog('PROFILE', 'Arquivo selecionado via computador:', {
+          name: file.name,
+          size: Math.round(file.size / 1024) + 'KB',
+          type: file.type
+        });
+
+        try {
+          const reader = new FileReader();
+          reader.onload = async (e) => {
+            const imageUri = e.target.result;
+            
+            const asset = {
+              uri: imageUri,
+              width: 0,
+              height: 0,
+              fileSize: file.size,
+              mimeType: file.type,
+              fileName: file.name
+            };
+
+            await processAndUploadImage(imageUri, asset);
+          };
+          
+          reader.onerror = () => {
+            showErrorAlert('Erro', 'Erro ao ler arquivo selecionado');
+            setIsUploadingImage(false);
+          };
+          
+          reader.readAsDataURL(file);
+        } catch (error) {
+          errorLog('PROFILE', 'Erro ao processar arquivo:', error);
+          showErrorAlert('Erro', `Erro ao processar arquivo: ${error.message}`);
+          setIsUploadingImage(false);
+        }
+      };
+
+      input.oncancel = () => {
+        debugLog('PROFILE', 'Seleção cancelada');
+        setIsUploadingImage(false);
+      };
+
+      input.click();
+      
+    } catch (error) {
+      errorLog('PROFILE', 'Erro no pickImageFromComputer:', error);
+      showErrorAlert('Erro', `Erro ao abrir seletor: ${error.message}`);
+      setIsUploadingImage(false);
+    }
+  };
+
+  const pickImageFromGallery = async () => {
     try {
       debugLog('PROFILE', 'Solicitando permissão para galeria...');
       
@@ -140,14 +213,14 @@ export default function ProfileScreen({ navigation }) {
       }
       
     } catch (error) {
-      errorLog('PROFILE', 'Erro no pickImage:', error);
+      errorLog('PROFILE', 'Erro no pickImageFromGallery:', error);
       showErrorAlert('Erro', `Erro ao selecionar imagem: ${error.message}`);
     } finally {
       setIsUploadingImage(false);
     }
   };
 
-  const takePhoto = async () => {
+  const takePhotoWithCamera = async () => {
     try {
       debugLog('PROFILE', 'Solicitando permissão para câmera...');
       
@@ -175,96 +248,52 @@ export default function ProfileScreen({ navigation }) {
       }
       
     } catch (error) {
-      errorLog('PROFILE', 'Erro no takePhoto:', error);
+      errorLog('PROFILE', 'Erro no takePhotoWithCamera:', error);
       showErrorAlert('Erro', `Erro ao tirar foto: ${error.message}`);
     } finally {
       setIsUploadingImage(false);
     }
   };
 
-  const pickImageFromComputer = async () => {
-    try {
-      debugLog('PROFILE', 'Iniciando seleção via computador/web...');
-      
-      if (Platform.OS !== 'web') {
-        showErrorAlert('Erro', 'Esta opção está disponível apenas na versão web');
-        return;
-      }
-
-      setIsUploadingImage(true);
-
-      // Criar input file para web
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/jpeg,image/jpg,image/png,image/webp';
-      
-      input.onchange = async (event) => {
-        const file = event.target.files[0];
-        if (!file) {
-          debugLog('PROFILE', 'Nenhum arquivo selecionado');
-          setIsUploadingImage(false);
-          return;
-        }
-
-        debugLog('PROFILE', 'Arquivo selecionado via computador:', {
-          name: file.name,
-          size: Math.round(file.size / 1024) + 'KB',
-          type: file.type
-        });
-
+  const handleRemovePhoto = async () => {
+    showConfirmAlert(
+      'Remover Foto',
+      'Tem certeza que deseja remover sua foto de perfil?',
+      async () => {
+        setIsUploadingImage(true);
+        
         try {
-          // Converter file para data URL
-          const reader = new FileReader();
-          reader.onload = async (e) => {
-            const imageUri = e.target.result;
-            
-            // Simular asset do ImagePicker para compatibilidade
-            const asset = {
-              uri: imageUri,
-              width: 0, // Será determinado no processamento
-              height: 0,
-              fileSize: file.size,
-              mimeType: file.type,
-              fileName: file.name
-            };
-
-            await processAndUploadImage(imageUri, asset);
-          };
+          const result = await removeProfilePicture();
           
-          reader.onerror = () => {
-            showErrorAlert('Erro', 'Erro ao ler arquivo selecionado');
-            setIsUploadingImage(false);
-          };
-          
-          reader.readAsDataURL(file);
+          if (result.success) {
+            showSuccessAlert('Sucesso', 'Foto de perfil removida com sucesso', () => {
+              if (Platform.OS === 'web') {
+                setTimeout(() => window.location.reload(), 1000);
+              }
+            });
+          } else {
+            showErrorAlert('Erro', result.error || 'Erro ao remover foto');
+          }
         } catch (error) {
-          errorLog('PROFILE', 'Erro ao processar arquivo:', error);
-          showErrorAlert('Erro', `Erro ao processar arquivo: ${error.message}`);
+          showErrorAlert('Erro', 'Erro inesperado ao remover foto');
+        } finally {
           setIsUploadingImage(false);
         }
-      };
-
-      input.oncancel = () => {
-        debugLog('PROFILE', 'Seleção cancelada');
-        setIsUploadingImage(false);
-      };
-
-      // Trigger file picker
-      input.click();
-      
-    } catch (error) {
-      errorLog('PROFILE', 'Erro no pickImageFromComputer:', error);
-      showErrorAlert('Erro', `Erro ao abrir seletor: ${error.message}`);
-      setIsUploadingImage(false);
-    }
+      }
+    );
   };
 
-  const showImagePickerOptions = () => {
-    showImageSourceAlert(
-      () => pickImageFromComputer(), // Computador (web)
-      () => takePhoto(),             // Câmera
-      () => pickImage()              // Galeria
-    );
+  const showImageOptions = () => {
+    if (Platform.OS === 'web') {
+      pickImageFromComputer();
+    } else {
+      showConfirmAlert(
+        'Alterar Foto',
+        'Escolha como deseja adicionar uma foto:',
+        takePhotoWithCamera,
+        pickImageFromGallery
+      );
+    }
   };
 
   if (authLoading) {
@@ -290,7 +319,6 @@ export default function ProfileScreen({ navigation }) {
     >
       <StatusBar style={isDark ? "light" : "dark"} />
 
-      {/* Header */}
       <View
         style={[
           styles.header,
@@ -319,13 +347,11 @@ export default function ProfileScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {/* Profile Info Card */}
         <View
           style={[styles.profileCard, { backgroundColor: theme.colors.card }]}
         >
-          {/* Avatar Section */}
           <View style={styles.avatarSection}>
-            <TouchableOpacity onPress={showImagePickerOptions} disabled={isUploadingImage}>
+            <TouchableOpacity onPress={showImageOptions} disabled={isUploadingImage}>
               {isUploadingImage ? (
                 <View style={styles.avatarContainer}>
                   <ActivityIndicator color={theme.colors.primary} size="large" />
@@ -334,7 +360,11 @@ export default function ProfileScreen({ navigation }) {
                   </Text>
                 </View>
               ) : user?.photoURL ? (
-                <Image source={{ uri: user.photoURL }} style={styles.avatar} />
+                <Image 
+                  key={`avatar-${user.uid}-${Date.now()}`}
+                  source={{ uri: user.photoURL }} 
+                  style={styles.avatar} 
+                />
               ) : (
                 <View
                   style={[
@@ -356,9 +386,20 @@ export default function ProfileScreen({ navigation }) {
                 </View>
               )}
             </TouchableOpacity>
+
+            {user?.photoURL && !isUploadingImage && (
+              <TouchableOpacity 
+                style={styles.removePhotoButton} 
+                onPress={handleRemovePhoto}
+              >
+                <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
+                <Text style={[styles.removePhotoText, { color: theme.colors.error }]}>
+                  Remover foto
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* User Info Section */}
           <View style={styles.userInfoSection}>
             {isEditing ? (
               <View style={styles.editForm}>
@@ -419,7 +460,6 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Stats Cards */}
         <View style={styles.statsContainer}>
           <View
             style={[styles.statCard, { backgroundColor: theme.colors.card }]}
@@ -452,7 +492,6 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Quick Actions */}
         <View
           style={[styles.actionsCard, { backgroundColor: theme.colors.card }]}
         >
@@ -587,6 +626,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     fontWeight: "bold",
+  },
+  removePhotoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    padding: 6,
+  },
+  removePhotoText: {
+    marginLeft: 4,
+    fontSize: 12,
+    fontFamily: "EncodeSansExpanded_400Regular",
   },
   userInfoSection: {
     alignItems: "center",

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,9 +15,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { debugLog, errorLog, successLog } from '../config/debugConfig';
 import { showLogoutConfirm, showErrorAlert } from '../utils/crossPlatformAlert';
 
-const UserAvatar = ({ user, styles }) => {
+const UserAvatar = React.memo(({ user, styles }) => {
+  const avatarKey = useMemo(() => 
+    `${user?.uid || 'default'}-${user?.photoURL || 'no-photo'}-${Date.now()}`, 
+    [user?.uid, user?.photoURL]
+  );
+
   if (user?.photoURL) {
-    return <Image source={{ uri: user.photoURL }} style={styles.avatar} />;
+    return (
+      <Image 
+        key={avatarKey}
+        source={{ uri: user.photoURL }} 
+        style={styles.avatar} 
+      />
+    );
   }
   
   return (
@@ -28,7 +39,7 @@ const UserAvatar = ({ user, styles }) => {
       </Text>
     </View>
   );
-};
+});
 
 const MenuItem = ({ item, theme, onPress, isLoggingOut }) => {
   const getIconColor = () => {
@@ -77,6 +88,16 @@ export default function CustomDrawerContent(props) {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const userDisplayName = useMemo(() => 
+    user?.displayName || 'Usuário', 
+    [user?.displayName]
+  );
+
+  const userEmail = useMemo(() => 
+    user?.email || 'email@exemplo.com', 
+    [user?.email]
+  );
 
   const logDebugInfo = (message, data = {}) => {
     debugLog('DRAWER', message, {
@@ -217,10 +238,10 @@ export default function CustomDrawerContent(props) {
           
           <View style={styles.userDetails}>
             <Text style={styles.userName}>
-              {user?.displayName || 'Usuário'}
+              {userDisplayName}
             </Text>
             <Text style={styles.userEmail}>
-              {user?.email || 'email@exemplo.com'}
+              {userEmail}
             </Text>
           </View>
         </TouchableOpacity>

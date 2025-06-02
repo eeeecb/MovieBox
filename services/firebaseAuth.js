@@ -312,6 +312,46 @@ export const firebaseAuthService = {
     }
   },
 
+  async removeProfilePicture(uid) {
+    try {
+      await initializeServices();
+      
+      debugLog('AUTH', 'Removendo foto de perfil', { uid });
+      
+      const currentUser = auth.currentUser;
+      if (!currentUser || currentUser.uid !== uid) {
+        return { success: false, error: 'Usuário não autenticado' };
+      }
+
+      try {
+        await updateDoc(doc(db, 'users', uid), {
+          profilePictureBase64: null,
+          photoURL: null,
+          updatedAt: new Date().toISOString(),
+          profilePictureStats: null
+        });
+        debugLog('AUTH', 'Foto removida do Firestore com sucesso');
+      } catch (firestoreError) {
+        warnLog('AUTH', 'Não foi possível remover do Firestore: ' + firestoreError.message);
+        return { success: false, error: 'Erro ao remover imagem. Verifique sua conexão.' };
+      }
+
+      try {
+        await updateProfile(currentUser, { photoURL: null });
+        debugLog('AUTH', 'PhotoURL removido do Firebase Auth');
+      } catch (authError) {
+        warnLog('AUTH', 'Não foi possível atualizar Auth photoURL: ' + authError.message);
+      }
+
+      successLog('AUTH', 'Foto de perfil removida com sucesso');
+      return { success: true };
+
+    } catch (error) {
+      errorLog('AUTH', 'Erro ao remover foto de perfil:', error);
+      return { success: false, error: 'Erro ao remover foto de perfil. Tente novamente.' };
+    }
+  },
+
   async updateUserPreferences(uid, preferences) {
     try {
       await initializeServices();

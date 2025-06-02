@@ -122,14 +122,72 @@ export const useAuth = () => {
     if (!user) return { success: false, error: 'Usuário não autenticado' };
     
     debugLog('AUTH_HOOK', 'Atualizando perfil via hook', { uid: user.uid, data });
-    return handleAuthAction(firebaseAuthService.updateUserProfile, user.uid, data);
+    
+    try {
+      const result = await firebaseAuthService.updateUserProfile(user.uid, data);
+      
+      if (result.success && data.name) {
+        setUser(prevUser => ({
+          ...prevUser,
+          displayName: data.name
+        }));
+        successLog('AUTH_HOOK', 'Estado do usuário atualizado com novo nome');
+      }
+      
+      return result;
+    } catch (err) {
+      const errorMessage = err.message || 'Erro ao atualizar perfil';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
   };
 
   const updateProfilePicture = async (imageUri, fileInfo = {}) => {
     if (!user) return { success: false, error: 'Usuário não autenticado' };
     
     debugLog('AUTH_HOOK', 'Atualizando foto de perfil via hook', { uid: user.uid });
-    return handleAuthAction(firebaseAuthService.updateProfilePicture, user.uid, imageUri, fileInfo);
+    
+    try {
+      const result = await firebaseAuthService.updateProfilePicture(user.uid, imageUri, fileInfo);
+      
+      if (result.success) {
+        setUser(prevUser => ({
+          ...prevUser,
+          photoURL: result.photoURL + `?t=${Date.now()}`
+        }));
+        successLog('AUTH_HOOK', 'Estado do usuário atualizado com nova foto');
+      }
+      
+      return result;
+    } catch (err) {
+      const errorMessage = err.message || 'Erro ao atualizar foto';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  };
+
+  const removeProfilePicture = async () => {
+    if (!user) return { success: false, error: 'Usuário não autenticado' };
+    
+    debugLog('AUTH_HOOK', 'Removendo foto de perfil via hook', { uid: user.uid });
+    
+    try {
+      const result = await firebaseAuthService.removeProfilePicture(user.uid);
+      
+      if (result.success) {
+        setUser(prevUser => ({
+          ...prevUser,
+          photoURL: null
+        }));
+        successLog('AUTH_HOOK', 'Estado do usuário atualizado - foto removida');
+      }
+      
+      return result;
+    } catch (err) {
+      const errorMessage = err.message || 'Erro ao remover foto';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
   };
 
   const updatePreferences = async (preferences) => {
@@ -181,6 +239,7 @@ export const useAuth = () => {
     logout,
     updateProfile,
     updateProfilePicture,
+    removeProfilePicture,
     updatePreferences,
     clearAuthError
   };
