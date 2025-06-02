@@ -22,6 +22,13 @@ export const lightTheme = {
     inputBorder: '#DDDDDD',
     tabBar: '#FFFFFF',
     tabBarInactive: '#757575',
+
+    shimmer: {
+      base: '#E1E9EE',
+      highlight: '#F5F7FA',
+      intensity: 0.3,
+      speed: 1500,
+    }
   }
 };
 
@@ -43,6 +50,13 @@ export const darkTheme = {
     inputBorder: '#444444',
     tabBar: '#1E1E1E',
     tabBarInactive: '#AAAAAA',
+
+    shimmer: {
+      base: '#2A2A2A',
+      highlight: '#404040',
+      intensity: 0.4,
+      speed: 1500,
+    }
   }
 };
 
