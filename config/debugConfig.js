@@ -1,5 +1,5 @@
 export const DEBUG_CONFIG = {
-  ENABLE_DEBUG_LOGS: true,
+  ENABLE_DEBUG_LOGS: false,
   AUTH_LOGS: true,
   FIRESTORE_LOGS: true,
   THEME_LOGS: true,
